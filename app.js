@@ -25,12 +25,12 @@ document.getElementById('estimate-nav').addEventListener('click', (e) => {
 
 let state = {
   stories: 1,
-  squareFootage: 3000,
+  squareFootage: 0,
   cornerOutlines: {},
   roofCount: 1,
   foundationLevels: 1,
   roofLevels: 1,
-  concreteDetailTypes: 1,
+  concreteDetailTypes: 0,
   dollarPerHour: 150,
   retaining4to6: 0,
   retaining6to10: 0,
@@ -48,17 +48,19 @@ let state = {
   problematicBraceLines: { level1: 0, level2: 0, level3: 0, level4: 0 },
   poolPresent: false,
   poolHours: 12,
+  pierAndBeamPresent: false,
+  pierAndBeamCorners: [4],
 };
 
 function resetState() {
   state = {
     stories: 1,
-    squareFootage: 3000,
+    squareFootage: 0,
     cornerOutlines: {},
     roofCount: 1,
     foundationLevels: 1,
     roofLevels: 1,
-    concreteDetailTypes: 1,
+    concreteDetailTypes: 0,
     dollarPerHour: 150,
     retaining4to6: 0,
     retaining6to10: 0,
@@ -135,7 +137,7 @@ function rebuildForm() {
             <input type="number" id="dollarPerHour" min="1" step="1" value="${state.dollarPerHour}">
           </div>
         </div>
-        <p class="help-text">For each layer, count every direction change around the perimeter (convex + concave). Ignore jogs under ~1 ft. Add separate outlines for detached structures or separate diaphragms.</p>
+        <p class="help-text">Look at the floor plan for each layer and trace around the outside edge. Count every corner where the perimeter changes direction — both inward (concave) and outward (convex) corners. Skip any small jogs under about 1 foot. If the building has a detached garage, separate wing, or any part with its own independent floor structure, click "+ Add Outline" and count corners for that section separately.</p>
         ${layers.map((key) => renderCornerLayer(key)).join('')}
         <div class="form-row" style="margin-top: 0.75rem;">
           <div class="form-group">
@@ -143,13 +145,26 @@ function rebuildForm() {
             <input type="number" id="roofCount" min="1" value="${state.roofCount}">
           </div>
         </div>
-        <p class="help-text">Count independent roof chunks (high roof, low roof, porch roof, garage roof, etc.).</p>
+        <p class="help-text">Look at the roof plan or elevations and count each separate roof area. Examples: a main high roof, a lower roof over a bump-out, a porch roof, and a garage roof would be 4 roof chunks.</p>
+        <div class="form-row" style="margin-top: 0.75rem;">
+          <div class="form-group">
+            <label for="pierAndBeamPresent">Pier and Beam Present?</label>
+            <select id="pierAndBeamPresent">
+              <option value="no" ${!state.pierAndBeamPresent ? 'selected' : ''}>No</option>
+              <option value="yes" ${state.pierAndBeamPresent ? 'selected' : ''}>Yes</option>
+            </select>
+          </div>
+        </div>
+        <div id="pierAndBeamSection" style="${state.pierAndBeamPresent ? '' : 'display:none'}">
+          <p class="help-text">Trace the perimeter of the pier and beam floor area and count every corner where the edge changes direction, just like you did for the layers above.</p>
+          ${renderPierAndBeamOutlines()}
+        </div>
       </div>
 
       <!-- Section 2: Roof & Foundation Levels -->
       <div class="form-section">
         <h3>2. Roof & Foundation Levels</h3>
-        <p class="help-text">Each level = 2 base hours. Foundation squares (from slab corners) and roof count each add 1 hr.</p>
+        <p class="help-text">Foundation levels: how many distinct foundation elevation levels are shown on the plans (e.g., a house with a basement slab and a main-floor slab = 2). Roof levels: how many distinct roof-framing elevations appear (e.g., a single gable = 1; a main roof plus a lower shed dormer at a different bearing height = 2).</p>
         <div class="form-row">
           <div class="form-group">
             <label for="foundationLevels">Foundation Levels</label>
@@ -165,7 +180,7 @@ function rebuildForm() {
       <!-- 3) Concrete Detail Types -->
       <div class="form-section">
         <h3>3. Distinct Concrete Detail Types</h3>
-        <p class="help-text">Count non-slab foundation details you'll need to draw (piers, stem walls, helical caps, etc.). Grade beams are already included in the slab/square system. If two situations use the same typical detail with only a dimension change, count it once.</p>
+        <p class="help-text">Look at the foundation plan and count the different types of concrete details that will need their own unique detail drawing — for example, isolated piers, stem walls, helical pile caps, grade thickenings, etc. If two locations use the same detail type (just with different dimensions), only count it once. Standard slab and grade beams are already covered by the corner/square system, so don't count those here.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="concreteDetailTypes">Concrete Detail Types</label>
@@ -177,20 +192,20 @@ function rebuildForm() {
       <!-- 4) Retaining Wall Height Types -->
       <div class="form-section">
         <h3>4. Retaining Wall Height Types</h3>
-        <p class="help-text">Basement walls count here. Enter the count for each height class. 12 ft+ is manual hours.</p>
+        <p class="help-text">Check the site sections or grading plan for any walls that hold back soil (including basement walls). Measure or estimate the retained height (from finished grade on the low side to the top of wall) and enter the count for each height range. For walls over 12 ft, enter a manual hour estimate instead.</p>
         <div class="form-row">
           <div class="form-group">
-            <label for="retaining4to6">4–6 ft (4 hrs each)</label>
+            <label for="retaining4to6">4–6 ft</label>
             <input type="number" id="retaining4to6" min="0" value="${state.retaining4to6}">
           </div>
           <div class="form-group">
-            <label for="retaining6to10">6–10 ft (6 hrs each)</label>
+            <label for="retaining6to10">6–10 ft</label>
             <input type="number" id="retaining6to10" min="0" value="${state.retaining6to10}">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="retaining10to12">10–12 ft (8 hrs each)</label>
+            <label for="retaining10to12">10–12 ft</label>
             <input type="number" id="retaining10to12" min="0" value="${state.retaining10to12}">
           </div>
           <div class="form-group">
@@ -213,7 +228,7 @@ function rebuildForm() {
       <!-- 5) Discontinuities -->
       <div class="form-section">
         <h3>5. Discontinuities Between Adjacent Levels</h3>
-        <p class="help-text">Count each time a wall/column line on a level does not stack over the level directly below (within ~1 ft).</p>
+        <p class="help-text">Compare the floor plans of adjacent stories. Each time a bearing wall or column on an upper level does not line up (within about 1 ft) with a wall or column on the level directly below it, that counts as one discontinuity. Only count multi-story buildings.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="discontinuities">Number of Discontinuities</label>
@@ -225,7 +240,7 @@ function rebuildForm() {
       <!-- 6) Long-span Counts -->
       <div class="form-section">
         <h3>6. Long-Span Counts</h3>
-        <p class="help-text">From dimension strings on the drawings. Count each occurrence.</p>
+        <p class="help-text">Look at the dimension strings on the floor plans. Count each room or open area where the clear span between supports (walls or columns) falls in these ranges. For example, a large great room dimensioned at 22 ft wide counts once under 20–26 ft.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="span20to26Count">Spans 20–26 ft</label>
@@ -241,6 +256,7 @@ function rebuildForm() {
       <!-- 7) Section-driven Complexity -->
       <div class="form-section">
         <h3>7. Section-Driven Complexity</h3>
+        <p class="help-text">These items come from reviewing the building sections, elevations, and floor plans for conditions that add structural complexity.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="vaultZones">Vaulted / Cathedral Zones</label>
@@ -251,6 +267,7 @@ function rebuildForm() {
             <input type="number" id="plateHeightSets" min="1" value="${state.plateHeightSets}">
           </div>
         </div>
+        <p class="help-text"><strong>Vaulted zones:</strong> Count each area on the ceiling plan or sections where the ceiling follows the roof slope (no flat ceiling / attic above). <strong>Plate-height sets:</strong> Look at the wall sections — how many different top-of-wall (plate) heights are there? A typical single-story house with all 8 ft ceilings = 1. If some rooms are 8 ft and others are 10 ft, that's 2.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="voidsPenetrations">Big Penetrations / Voids</label>
@@ -261,18 +278,20 @@ function rebuildForm() {
             <input type="number" id="cantileverAreas" min="0" value="${state.cantileverAreas}">
           </div>
         </div>
+        <p class="help-text"><strong>Big penetrations / voids:</strong> Count large openings through floor or roof structure — stairwells, double-height spaces, large skylights, or chimney chases. Ignore standard MEP penetrations. <strong>Cantilever areas:</strong> Count each location where the floor or roof structure extends more than 2 ft past the supporting wall below (bay windows, balconies, bump-outs).</p>
         <div class="form-row">
           <div class="form-group">
             <label for="foundationStepRuns">Major Foundation Step Runs (&ge;12 in.)</label>
             <input type="number" id="foundationStepRuns" min="0" value="${state.foundationStepRuns}">
           </div>
         </div>
+        <p class="help-text">Look at the foundation plan or site grading. Count each run where the foundation steps down 12 inches or more to follow sloping grade. A single continuous step counts as one run.</p>
       </div>
 
       <!-- 8) Lateral Complexity -->
       <div class="form-section">
         <h3>8. Problematic Brace Lines by Level</h3>
-        <p class="help-text">Count brace/shear lines where walls are so interrupted that standard shear wall design isn't straightforward.</p>
+        <p class="help-text">For each level, look at the floor plan and identify wall lines that are supposed to resist lateral (wind/seismic) forces but are heavily interrupted by large openings, garage doors, or windows — making it difficult to fit a standard braced or shear wall segment. Count the number of such problematic lines per level.</p>
         <div class="form-row">
           ${layers.filter((k) => k !== 'slab').map((key) => {
             const num = key.replace('level', '');
@@ -288,6 +307,7 @@ function rebuildForm() {
       <!-- 9) Pool -->
       <div class="form-section">
         <h3>9. Pool</h3>
+        <p class="help-text">If the project includes a pool or spa that requires structural engineering (pool shell, deck, equipment pad, etc.), select Yes and enter an estimated hour count based on the scope.</p>
         <div class="form-row">
           <div class="form-group">
             <label for="poolPresent">Pool Present?</label>
@@ -338,6 +358,27 @@ function renderCornerLayer(key) {
   `;
 }
 
+function renderPierAndBeamOutlines() {
+  const outlines = state.pierAndBeamCorners;
+  return `
+    <div class="corner-layer" data-layer="pierAndBeam">
+      <div class="corner-layer-header">
+        <span class="corner-layer-label">Pier &amp; Beam Floor Framing</span>
+        <button class="btn-small btn-add-pb-outline">+ Add Outline</button>
+      </div>
+      <div class="corner-outlines">
+        ${outlines.map((count, idx) => `
+          <div class="outline-row">
+            <label>Outline ${idx + 1} corners</label>
+            <input type="number" class="pb-corner-input" data-idx="${idx}" min="4" step="2" value="${count}">
+            ${outlines.length > 1 ? `<button class="btn-remove-pb-outline" data-idx="${idx}" title="Remove outline">&times;</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function bindFormEvents() {
   // Stories change — rebuild form dynamically
   document.getElementById('stories').addEventListener('change', (e) => {
@@ -364,6 +405,37 @@ function bindFormEvents() {
       const layer = btn.dataset.layer;
       const idx = parseInt(btn.dataset.idx);
       state.cornerOutlines[layer].splice(idx, 1);
+      rebuildForm();
+    });
+  });
+
+  // Pier and beam toggle
+  document.getElementById('pierAndBeamPresent').addEventListener('change', (e) => {
+    const show = e.target.value === 'yes';
+    document.getElementById('pierAndBeamSection').style.display = show ? '' : 'none';
+    if (show) {
+      const cdtInput = document.getElementById('concreteDetailTypes');
+      if (parseInt(cdtInput.value) < 1) {
+        cdtInput.value = 1;
+      }
+    }
+  });
+
+  // Pier and beam add outline
+  document.querySelectorAll('.btn-add-pb-outline').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      readFormIntoState();
+      state.pierAndBeamCorners.push(4);
+      rebuildForm();
+    });
+  });
+
+  // Pier and beam remove outline
+  document.querySelectorAll('.btn-remove-pb-outline').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      readFormIntoState();
+      const idx = parseInt(btn.dataset.idx);
+      state.pierAndBeamCorners.splice(idx, 1);
       rebuildForm();
     });
   });
@@ -444,6 +516,13 @@ function readFormIntoState() {
 
   state.poolPresent = document.getElementById('poolPresent').value === 'yes';
   state.poolHours = parseFloat(document.getElementById('poolHours').value) || 0;
+
+  state.pierAndBeamPresent = document.getElementById('pierAndBeamPresent').value === 'yes';
+  state.pierAndBeamCorners = [];
+  document.querySelectorAll('.pb-corner-input').forEach((input) => {
+    state.pierAndBeamCorners.push(parseInt(input.value) || 4);
+  });
+  if (state.pierAndBeamCorners.length === 0) state.pierAndBeamCorners = [4];
 }
 
 // =========================================================
@@ -483,19 +562,40 @@ function calculateAndRender() {
     }
   });
 
+  // Pier and beam squares
+  let pierAndBeamSquares = 0;
+  if (state.pierAndBeamPresent) {
+    const pbOutlines = state.pierAndBeamCorners;
+    const pbParts = [];
+    pbOutlines.forEach((corners, idx) => {
+      const sq = Math.max((corners / 2) - 1, 0);
+      pierAndBeamSquares += sq;
+      pbParts.push(`Outline ${idx + 1}: (${corners} ÷ 2) − 1 = ${formatNum(sq)} sq`);
+    });
+    if (pbOutlines.length === 1) {
+      work.push({ label: 'Pier & Beam Floor Framing', detail: pbParts[0], value: formatNum(pierAndBeamSquares) + ' sq' });
+    } else {
+      work.push({ label: 'Pier & Beam Floor Framing', detail: pbParts.join('  |  ') + `  →  sum = ${formatNum(pierAndBeamSquares)}`, value: formatNum(pierAndBeamSquares) + ' sq' });
+    }
+    totalSquares += pierAndBeamSquares;
+  }
+
   const foundationSquares = layerSquares['slab'] || 0;
   const framingKeys = layerKeys.filter((k) => k !== 'slab');
   const framingSquares = framingKeys.reduce((sum, k) => sum + (layerSquares[k] || 0), 0);
 
   work.push({ label: 'Foundation Squares (slab)', detail: '', value: formatNum(foundationSquares) + ' sq', bold: false });
   work.push({ label: 'Framing Squares', detail: framingKeys.map((k) => formatNum(layerSquares[k])).join(' + '), value: formatNum(framingSquares) + ' sq', bold: false });
+  if (state.pierAndBeamPresent) {
+    work.push({ label: 'Pier & Beam Squares', detail: '', value: formatNum(pierAndBeamSquares) + ' sq', bold: false });
+  }
   work.push({ label: 'Roof Count', detail: '', value: state.roofCount, bold: false });
-  work.push({ label: 'Total Squares', detail: formatNum(foundationSquares) + ' + ' + formatNum(framingSquares), value: formatNum(totalSquares) + ' sq', bold: true });
+  work.push({ label: 'Total Squares', detail: formatNum(foundationSquares) + ' + ' + formatNum(framingSquares) + (state.pierAndBeamPresent ? ' + ' + formatNum(pierAndBeamSquares) : ''), value: formatNum(totalSquares) + ' sq', bold: true });
 
   // ----- Step 2: Base Hours -----
   work.push({ heading: 'Step 2: Base Hours' });
 
-  const setupHours = 6;
+  const setupHours = 4;
 
   // Foundation: 2 hrs per level + 1 hr per foundation square
   const fndLevelHours = state.foundationLevels * 2;
@@ -522,6 +622,11 @@ function calculateAndRender() {
   work.push({ label: 'Fixed setup', detail: '', value: formatNum(setupHours) + ' hrs' });
   work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 2 hrs + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
   work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 4 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
+
+  const pierAndBeamHours = state.pierAndBeamPresent ? 4 * pierAndBeamSquares : 0;
+  if (state.pierAndBeamPresent) {
+    work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 4 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
+  }
   work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 2 hrs + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
   work.push({ label: 'Concrete detail types', detail: `${state.concreteDetailTypes} × 4 hrs`, value: formatNum(concreteHours) + ' hrs' });
 
@@ -532,13 +637,16 @@ function calculateAndRender() {
   if (state.retaining12plus) retParts.push(`12+ ft: manual ${formatNum(ret12plusHours)}`);
   work.push({ label: 'Retaining walls', detail: retParts.length ? retParts.join(', ') : 'none', value: formatNum(retainingHours) + ' hrs' });
 
-  const baseHours = setupHours + foundationHours + framingSquareHours + roofHours + concreteHours + retainingHours;
-  const baseParts = [setupHours, foundationHours, framingSquareHours, roofHours, concreteHours, retainingHours].map(formatNum).join(' + ');
+  const baseHours = setupHours + foundationHours + framingSquareHours + pierAndBeamHours + roofHours + concreteHours + retainingHours;
+  const baseParts = [setupHours, foundationHours, framingSquareHours, pierAndBeamHours, roofHours, concreteHours, retainingHours].map(formatNum).join(' + ');
   work.push({ label: 'Base Hours Total', detail: baseParts, value: formatNum(baseHours) + ' hrs', bold: true });
 
   // ----- Step 3: Lateral Hours -----
   work.push({ heading: 'Step 3: Lateral Hours' });
-  work.push({ note: 'Weighted problematic brace lines × 4 hrs' });
+  work.push({ note: '2 hrs per level base + weighted problematic brace lines × 4 hrs' });
+
+  const lateralBaseHours = 2 * state.stories;
+  work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 2 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
 
   const L1 = state.problematicBraceLines.level1 || 0;
   const L2 = state.problematicBraceLines.level2 || 0;
@@ -553,11 +661,11 @@ function calculateAndRender() {
   if (state.stories >= 4) { weightedParts.push(`L4: ${L4} × 2.5 = ${formatNum(L4 * 2.5)}`); weightedValues.push(L4 * 2.5); }
 
   const weightedSum = weightedValues.reduce((a, b) => a + b, 0);
-  const lateralHours = 4 * weightedSum;
+  const lateralHours = lateralBaseHours + 4 * weightedSum;
 
   weightedParts.forEach((p) => work.push({ label: '', detail: p, value: '' }));
   work.push({ label: 'Weighted sum', detail: weightedValues.map(formatNum).join(' + '), value: formatNum(weightedSum) });
-  work.push({ label: 'Lateral Hours', detail: `4 × ${formatNum(weightedSum)}`, value: formatNum(lateralHours) + ' hrs', bold: true });
+  work.push({ label: 'Lateral Hours', detail: `${formatNum(lateralBaseHours)} + 4 × ${formatNum(weightedSum)}`, value: formatNum(lateralHours) + ' hrs', bold: true });
 
   // ----- Step 4: Modifier Hours -----
   work.push({ heading: 'Step 4: Modifier Hours' });
