@@ -768,7 +768,6 @@ function renderOutput(work, totalHours, roundedHours, fee) {
 
   html += `</tbody></table></div>`;
   outputDiv.innerHTML = html;
-  outputDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Initial render
