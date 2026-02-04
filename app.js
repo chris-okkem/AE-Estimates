@@ -144,7 +144,7 @@ function rebuildForm() {
         <div class="form-row" style="margin-top: 0.75rem;">
           <div class="form-group">
             <label for="roofCount">Roof Count</label>
-            <input type="number" id="roofCount" min="1" value="${state.roofCount}">
+            <input type="number" id="roofCount" min="0" value="${state.roofCount}">
           </div>
         </div>
         <p class="help-text">Look at the roof plan or elevations and count each separate roof area. Examples: a main high roof, a lower roof over a bump-out, a porch roof, and a garage roof would be 4 roof chunks.</p>
@@ -170,11 +170,11 @@ function rebuildForm() {
         <div class="form-row">
           <div class="form-group">
             <label for="foundationLevels">Foundation Levels</label>
-            <input type="number" id="foundationLevels" min="1" value="${state.foundationLevels}">
+            <input type="number" id="foundationLevels" min="0" value="${state.foundationLevels}">
           </div>
           <div class="form-group">
             <label for="roofLevels">Roof Levels</label>
-            <input type="number" id="roofLevels" min="1" value="${state.roofLevels}">
+            <input type="number" id="roofLevels" min="0" value="${state.roofLevels}">
           </div>
         </div>
       </div>
@@ -485,9 +485,9 @@ function readFormIntoState() {
   });
 
   state.squareFootage = parseFloat(document.getElementById('squareFootage').value) || 0;
-  state.roofCount = parseInt(document.getElementById('roofCount').value) || 1;
-  state.foundationLevels = parseInt(document.getElementById('foundationLevels').value) || 1;
-  state.roofLevels = parseInt(document.getElementById('roofLevels').value) || 1;
+  state.roofCount = intOrZero(document.getElementById('roofCount').value);
+  state.foundationLevels = intOrZero(document.getElementById('foundationLevels').value);
+  state.roofLevels = intOrZero(document.getElementById('roofLevels').value);
   state.concreteDetailTypes = parseInt(document.getElementById('concreteDetailTypes').value) || 0;
   state.dollarPerHour = parseFloat(document.getElementById('dollarPerHour').value) || 150;
 
@@ -723,6 +723,11 @@ function calculateAndRender() {
   work.push({ label: 'Fee (rounded hours)', detail: `${formatNum(roundedUp)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(feeRounded), bold: true });
 
   renderOutput(work, totalHours, roundedUp, feeRounded);
+}
+
+function intOrZero(val) {
+  const n = parseInt(val);
+  return isNaN(n) ? 0 : n;
 }
 
 function formatNum(n) {
