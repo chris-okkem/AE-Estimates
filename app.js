@@ -823,11 +823,10 @@ function openEmailModal() {
 
   document.body.appendChild(modal);
 
-  // Position overlay to cover the full document height, then scroll modal into view
-  modal.style.minHeight = document.documentElement.scrollHeight + 'px';
-  const modalContent = modal.querySelector('.modal-content');
-  modalContent.style.marginTop = window.scrollY + 'px';
-  modalContent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Delay scroll so the browser paints first; works across iframe boundaries
+  requestAnimationFrame(() => {
+    modal.querySelector('.modal-content').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   document.getElementById('btnModalCancel').addEventListener('click', () => modal.remove());
 
@@ -913,10 +912,9 @@ function showEmailPreview(feasibility, engineering, ca, weeksMin, weeksMax) {
 
   document.body.appendChild(modal);
 
-  modal.style.minHeight = document.documentElement.scrollHeight + 'px';
-  const modalContent = modal.querySelector('.modal-content');
-  modalContent.style.marginTop = window.scrollY + 'px';
-  modalContent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  requestAnimationFrame(() => {
+    modal.querySelector('.modal-content').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   document.getElementById('btnEmailClose').addEventListener('click', () => modal.remove());
 
