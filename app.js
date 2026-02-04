@@ -823,11 +823,6 @@ function openEmailModal() {
 
   document.body.appendChild(modal);
 
-  // Delay scroll so the browser paints first; works across iframe boundaries
-  requestAnimationFrame(() => {
-    modal.querySelector('.modal-content').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
-
   document.getElementById('btnModalCancel').addEventListener('click', () => modal.remove());
 
   document.getElementById('btnModalGenerate').addEventListener('click', () => {
@@ -911,10 +906,6 @@ function showEmailPreview(feasibility, engineering, ca, weeksMin, weeksMax) {
   `;
 
   document.body.appendChild(modal);
-
-  requestAnimationFrame(() => {
-    modal.querySelector('.modal-content').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
 
   document.getElementById('btnEmailClose').addEventListener('click', () => modal.remove());
 
