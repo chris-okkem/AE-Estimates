@@ -732,7 +732,10 @@ function formatMoney(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+let lastCalculatedFee = 0;
+
 function renderOutput(work, totalHours, roundedHours, fee) {
+  lastCalculatedFee = fee;
   const outputDiv = document.getElementById('estimate-output');
 
   let html = `<div class="estimate-output">
@@ -748,6 +751,9 @@ function renderOutput(work, totalHours, roundedHours, fee) {
       <div class="summary-item">
         <span class="summary-label">Estimated Fee</span>
         <span class="summary-value">$${formatMoney(fee)}</span>
+      </div>
+      <div class="summary-item summary-action">
+        <button class="btn btn-email" id="btnGenerateEmail">Generate Email</button>
       </div>
     </div>
     <h2>Detailed Breakdown</h2>
@@ -768,6 +774,175 @@ function renderOutput(work, totalHours, roundedHours, fee) {
 
   html += `</tbody></table></div>`;
   outputDiv.innerHTML = html;
+
+  document.getElementById('btnGenerateEmail').addEventListener('click', () => {
+    openEmailModal();
+  });
+}
+
+// =========================================================
+// Email Modal & Generation
+// =========================================================
+
+function openEmailModal() {
+  // Remove any existing modal
+  const existing = document.getElementById('emailModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'emailModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h2>Generate Email Template</h2>
+      <p class="modal-subtitle">Engineering fee: <strong>$${formatMoney(lastCalculatedFee)}</strong></p>
+      <div class="modal-form">
+        <div class="form-group">
+          <label for="emailFeasibility">Feasibility / Pre-Design Site Visit Fee ($)</label>
+          <input type="number" id="emailFeasibility" min="0" step="100" value="0">
+        </div>
+        <div class="form-group">
+          <label for="emailCA">Construction Administration (CA) Allowance ($)</label>
+          <input type="number" id="emailCA" min="0" step="100" value="0">
+        </div>
+        <div class="form-group">
+          <label for="emailWeeksEarliest">Earliest turnaround (weeks)</label>
+          <input type="number" id="emailWeeksEarliest" min="1" step="1" value="4">
+        </div>
+        <div class="form-group">
+          <label for="emailWeeksLatest">Latest turnaround (weeks)</label>
+          <input type="number" id="emailWeeksLatest" min="1" step="1" value="6">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="btnModalGenerate">Generate</button>
+        <button class="btn btn-secondary" id="btnModalCancel">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('btnModalCancel').addEventListener('click', () => modal.remove());
+
+  document.getElementById('btnModalGenerate').addEventListener('click', () => {
+    const feasibility = parseFloat(document.getElementById('emailFeasibility').value) || 0;
+    const ca = parseFloat(document.getElementById('emailCA').value) || 0;
+    const weeksMin = parseInt(document.getElementById('emailWeeksEarliest').value) || 4;
+    const weeksMax = parseInt(document.getElementById('emailWeeksLatest').value) || 6;
+
+    modal.remove();
+    showEmailPreview(feasibility, lastCalculatedFee, ca, weeksMin, weeksMax);
+  });
+}
+
+function showEmailPreview(feasibility, engineering, ca, weeksMin, weeksMax) {
+  const existing = document.getElementById('emailPreviewModal');
+  if (existing) existing.remove();
+
+  const feasibilityLine = feasibility > 0
+    ? `<b>Feasibility:</b> $${formatMoney(feasibility)}`
+    : `<b>Feasibility:</b> <i>N/A</i>`;
+
+  const caLine = ca > 0
+    ? `<b>Construction Administration (CA) Allowance (optional):</b> $${formatMoney(ca)}`
+    : `<b>Construction Administration (CA) Allowance (optional):</b> <i>N/A</i>`;
+
+  const timelineText = weeksMin === weeksMax
+    ? `${weeksMin} weeks`
+    : `${weeksMin}\u2013${weeksMax} weeks`;
+
+  // Gmail uses Arial 11pt as default. Inline styles on every element because Gmail strips <style> tags and class attributes.
+  const ulStyle = 'style="padding-left: 28px; margin: 8px 0;"';
+  const liStyle = 'style="margin-bottom: 4px; list-style-type: disc;"';
+
+  const emailHTML = `<div style="font-family: Arial, Helvetica, sans-serif; font-size: small; color: #000000; line-height: 1.5;">
+<p style="margin: 0 0 10px 0;">My understanding of the scope is as follows: structural engineering services for [PROPOSED_SCOPE] at [PROJECT ADDRESS], including design and detailing for:</p>
+<ul ${ulStyle}>
+<li ${liStyle}>[Item 1]</li>
+<li ${liStyle}>[Item 2]</li>
+<li ${liStyle}>[Item 3]</li>
+</ul>
+<p style="margin: 10px 0;">Based on the current information, I believe your engineering budgets for this project should be as follows:</p>
+<ul ${ulStyle}>
+<li ${liStyle}>${feasibilityLine}</li>
+<li ${liStyle}><b>Engineering (Design + Permit Set):</b> $${formatMoney(engineering)}</li>
+<li ${liStyle}>${caLine}</li>
+</ul>
+<p style="margin: 10px 0;">Right now, we could have drawings ready in <b>${timelineText}</b>. However, that figure fluctuates along with our backlog. Once we have a signed contract and retainer, we can reserve you a spot on our schedule.</p>
+<p style="margin: 10px 0;"><b>What\u2019s included (high level):</b></p>
+<ul ${ulStyle}>
+<li ${liStyle}>Structural review + design of major framing/foundations and lateral stability using standard hardware</li>
+<li ${liStyle}>Typical coordination for architectural integration + common permit comments</li>
+<li ${liStyle}>Limited construction-phase support (RFIs/submittal review) and site observations, if requested</li>
+</ul>
+<p style="margin: 10px 0;"><b>Assumptions / qualifications (important):</b></p>
+<ul ${ulStyle}>
+<li ${liStyle}><b>PDFs govern:</b> Engineering is based on the latest architect-issued, dimensioned PDF set. CAD/BIM (if provided) is non-governing and may not be reviewed; we do not verify CAD/PDF consistency.</li>
+<li ${liStyle}><b>Geometry lock:</b> Architectural geometry is assumed frozen upon engineering start. Any changes to footprint, levels, rooflines, openings, or structural layout after start may affect fee and schedule.</li>
+<li ${liStyle}><b>Connections:</b> Unless specifically detailed, connections use standard, commercially available hardware with published load data; custom/architectural connection design is excluded.</li>
+<li ${liStyle}><b>Guardrails:</b> Guardrail systems are assumed to be prescriptive or manufacturer-engineered; we design only the supporting framing and blocking.</li>
+<li ${liStyle}><b>Consultants:</b> Architectural, MEP, FP, civil, and geotechnical design are by others.</li>
+<li ${liStyle}><b>Site Access:</b> Site access must allow standard visual observation without special equipment or confined-space requirements.</li>
+<li ${liStyle}><b>Reimbursables:</b> Expenses such as municipal fees or specialty tools will be billed at cost with Client approval.</li>
+</ul>
+<p style="margin: 10px 0;">Please let me know if you\u2019d like to move forward.</p>
+</div>`;
+
+  const modal = document.createElement('div');
+  modal.id = 'emailPreviewModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content modal-content-wide">
+      <div class="modal-header-row">
+        <h2>Email Preview</h2>
+        <button class="btn btn-primary btn-copy" id="btnCopyEmail">Copy to Clipboard</button>
+      </div>
+      <div class="email-preview" id="emailPreviewContent">${emailHTML}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btnEmailClose">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('btnEmailClose').addEventListener('click', () => modal.remove());
+
+  document.getElementById('btnCopyEmail').addEventListener('click', () => {
+    const previewEl = document.getElementById('emailPreviewContent');
+    // Copy as rich text so Gmail preserves formatting
+    const range = document.createRange();
+    range.selectNodeContents(previewEl);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Use clipboard API with HTML blob for rich text
+    const htmlContent = previewEl.innerHTML;
+    const plainContent = previewEl.innerText;
+    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+    const textBlob = new Blob([plainContent], { type: 'text/plain' });
+
+    navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': htmlBlob,
+        'text/plain': textBlob,
+      })
+    ]).then(() => {
+      const btn = document.getElementById('btnCopyEmail');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+    }).catch(() => {
+      // Fallback: execCommand
+      document.execCommand('copy');
+      const btn = document.getElementById('btnCopyEmail');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+    });
+
+    selection.removeAllRanges();
+  });
 }
 
 // Initial render
