@@ -78,6 +78,8 @@ function resetState() {
     problematicBraceLines: { level1: 0, level2: 0, level3: 0, level4: 0 },
     poolPresent: false,
     poolHours: 12,
+    pierAndBeamPresent: false,
+    pierAndBeamCorners: [4],
   };
   initCornerOutlines();
 }
@@ -911,38 +913,46 @@ function showEmailPreview(feasibility, engineering, ca, weeksMin, weeksMax) {
 
   document.getElementById('btnCopyEmail').addEventListener('click', () => {
     const previewEl = document.getElementById('emailPreviewContent');
-    // Copy as rich text so Gmail preserves formatting
-    const range = document.createRange();
-    range.selectNodeContents(previewEl);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
+    const btn = document.getElementById('btnCopyEmail');
 
-    // Use clipboard API with HTML blob for rich text
-    const htmlContent = previewEl.innerHTML;
-    const plainContent = previewEl.innerText;
-    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
-    const textBlob = new Blob([plainContent], { type: 'text/plain' });
-
-    navigator.clipboard.write([
-      new ClipboardItem({
-        'text/html': htmlBlob,
-        'text/plain': textBlob,
-      })
-    ]).then(() => {
-      const btn = document.getElementById('btnCopyEmail');
+    function showCopied() {
       btn.textContent = 'Copied!';
       setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
-    }).catch(() => {
-      // Fallback: execCommand
-      document.execCommand('copy');
-      const btn = document.getElementById('btnCopyEmail');
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
-    });
+    }
 
-    selection.removeAllRanges();
+    // Try modern clipboard API first (rich text)
+    if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+      const htmlContent = previewEl.innerHTML;
+      const plainContent = previewEl.innerText;
+      const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+      const textBlob = new Blob([plainContent], { type: 'text/plain' });
+
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': htmlBlob,
+          'text/plain': textBlob,
+        })
+      ]).then(showCopied).catch(() => {
+        // Fallback: select and execCommand
+        copyViaSelection(previewEl);
+        showCopied();
+      });
+    } else {
+      // Fallback for browsers without ClipboardItem
+      copyViaSelection(previewEl);
+      showCopied();
+    }
   });
+}
+
+function copyViaSelection(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  document.execCommand('copy');
+  selection.removeAllRanges();
 }
 
 // Initial render
