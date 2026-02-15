@@ -607,8 +607,8 @@ function calculateAndRender() {
   // Framing: 3 hrs per square
   const framingSquareHours = 3 * framingSquares;
 
-  // Roof: 2 hrs per level + 1 hr per roof count
-  const roofLevelHours = state.roofLevels * 2;
+  // Roof: 1 hr per level + 1 hr per roof count
+  const roofLevelHours = state.roofLevels * 1;
   const roofCountHours = state.roofCount * 1;
   const roofHours = roofLevelHours + roofCountHours;
 
@@ -629,7 +629,7 @@ function calculateAndRender() {
   if (state.pierAndBeamPresent) {
     work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 3 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
   }
-  work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 2 hrs + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
+  work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
   work.push({ label: 'Concrete detail types', detail: `${state.concreteDetailTypes} × 4 hrs`, value: formatNum(concreteHours) + ' hrs' });
 
   const retParts = [];
