@@ -30,13 +30,10 @@ let state = {
   roofCount: 1,
   foundationLevels: 1,
   roofLevels: 1,
-  concreteDetailTypes: 0,
+  minorConcreteDetails: 0,
+  majorConcreteDetails: 0,
+  manualConcreteDetails: [],
   dollarPerHour: 150,
-  retaining4to6: 0,
-  retaining6to10: 0,
-  retaining10to12: 0,
-  retaining12plus: false,
-  retaining12plusHours: 0,
   discontinuities: 0,
   span20to26Count: 0,
   spanOver26Count: 0,
@@ -60,13 +57,10 @@ function resetState() {
     roofCount: 1,
     foundationLevels: 1,
     roofLevels: 1,
-    concreteDetailTypes: 0,
+    minorConcreteDetails: 0,
+    majorConcreteDetails: 0,
+    manualConcreteDetails: [],
     dollarPerHour: 150,
-    retaining4to6: 0,
-    retaining6to10: 0,
-    retaining10to12: 0,
-    retaining12plus: false,
-    retaining12plusHours: 0,
     discontinuities: 0,
     span20to26Count: 0,
     spanOver26Count: 0,
@@ -179,48 +173,41 @@ function rebuildForm() {
         </div>
       </div>
 
-      <!-- 3) Concrete Detail Types -->
+      <!-- 3) Concrete Details -->
       <div class="form-section">
-        <h3>3. Distinct Concrete Detail Types</h3>
-        <p class="help-text">Look at the foundation plan and count the different types of concrete details that will need their own unique detail drawing — for example, isolated piers, stem walls, helical pile caps, grade thickenings, etc. If two locations use the same detail type (just with different dimensions), only count it once. Standard slab and grade beams are already covered by the corner/square system, so don't count those here.</p>
+        <h3>3. Concrete Details</h3>
+        <p class="help-text"><strong>Minor</strong> (3 hrs each): all concrete structures ≤ 6 ft in height — shallow spread footers, small retaining walls 4–6 ft, staircases, equipment pads, etc. If pier &amp; beam is present above, the minor count automatically starts at 1 to account for the piers.
+        <br><strong>Major</strong> (6 hrs each): any concrete structures &gt; 6 ft in height, or anything the estimator deems structurally complex — tall retaining walls, deep foundations, grade beams, etc.
+        <br><strong>Manual</strong>: use "Add Detail" for anything that doesn't fit the categories above; enter a description and hours for each.</p>
         <div class="form-row">
           <div class="form-group">
-            <label for="concreteDetailTypes">Concrete Detail Types</label>
-            <input type="number" id="concreteDetailTypes" min="0" value="${state.concreteDetailTypes}">
+            <label for="minorConcreteDetails">Minor Details</label>
+            <input type="number" id="minorConcreteDetails" min="0" value="${Math.max(state.minorConcreteDetails, state.pierAndBeamPresent ? 1 : 0)}">
+          </div>
+          <div class="form-group">
+            <label for="majorConcreteDetails">Major Details</label>
+            <input type="number" id="majorConcreteDetails" min="0" value="${state.majorConcreteDetails}">
           </div>
         </div>
-      </div>
-
-      <!-- 4) Retaining Wall Height Types -->
-      <div class="form-section">
-        <h3>4. Retaining Wall Height Types</h3>
-        <p class="help-text">Check the site sections or grading plan for any walls that hold back soil (including basement walls). Measure or estimate the retained height (from finished grade on the low side to the top of wall) and enter the count for each height range. For walls over 12 ft, enter a manual hour estimate instead.</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="retaining4to6">4–6 ft</label>
-            <input type="number" id="retaining4to6" min="0" value="${state.retaining4to6}">
+        <div id="manualConcreteSection">
+          <div id="manualConcreteList">
+            ${(state.manualConcreteDetails || []).map((item, idx) => `
+              <div class="form-row manual-concrete-row" data-idx="${idx}">
+                <div class="form-group" style="flex:2">
+                  <label>Description</label>
+                  <input type="text" class="manual-concrete-desc" data-idx="${idx}" value="${item.desc || ''}">
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label>Hours</label>
+                  <input type="number" class="manual-concrete-hrs" data-idx="${idx}" min="0" step="0.5" value="${item.hours || 0}">
+                </div>
+                <div class="form-group" style="flex:0; align-self:flex-end;">
+                  <button class="btn-remove-manual-concrete" data-idx="${idx}" title="Remove">&times;</button>
+                </div>
+              </div>
+            `).join('')}
           </div>
-          <div class="form-group">
-            <label for="retaining6to10">6–10 ft</label>
-            <input type="number" id="retaining6to10" min="0" value="${state.retaining6to10}">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="retaining10to12">10–12 ft</label>
-            <input type="number" id="retaining10to12" min="0" value="${state.retaining10to12}">
-          </div>
-          <div class="form-group">
-            <label for="retaining12plus">12+ ft present?</label>
-            <select id="retaining12plus">
-              <option value="no" ${!state.retaining12plus ? 'selected' : ''}>No</option>
-              <option value="yes" ${state.retaining12plus ? 'selected' : ''}>Yes</option>
-            </select>
-          </div>
-          <div class="form-group" id="retaining12plusHoursGroup" style="${state.retaining12plus ? '' : 'display:none'}">
-            <label for="retaining12plusHours">12+ ft hours (manual)</label>
-            <input type="number" id="retaining12plusHours" min="0" step="0.5" value="${state.retaining12plusHours}">
-          </div>
+          <button class="btn-small" id="btnAddManualConcrete">+ Add Detail</button>
         </div>
       </div>
 
@@ -229,7 +216,7 @@ function rebuildForm() {
 
       <!-- 5) Discontinuities -->
       <div class="form-section">
-        <h3>5. Discontinuities Between Adjacent Levels</h3>
+        <h3>4. Discontinuities Between Adjacent Levels</h3>
         <p class="help-text">Compare the floor plans of adjacent stories. Each time a bearing wall or column on an upper level does not line up (within about 1 ft) with a wall or column on the level directly below it, that counts as one discontinuity. Only count multi-story buildings.</p>
         <div class="form-row">
           <div class="form-group">
@@ -241,7 +228,7 @@ function rebuildForm() {
 
       <!-- 6) Long-span Counts -->
       <div class="form-section">
-        <h3>6. Long-Span Counts</h3>
+        <h3>5. Long-Span Counts</h3>
         <p class="help-text">Look at the dimension strings on the floor plans. Count each room or open area where the clear span between supports (walls or columns) falls in these ranges. For example, a large great room dimensioned at 22 ft wide counts once under 20–26 ft.</p>
         <div class="form-row">
           <div class="form-group">
@@ -257,7 +244,7 @@ function rebuildForm() {
 
       <!-- 7) Section-driven Complexity -->
       <div class="form-section">
-        <h3>7. Section-Driven Complexity</h3>
+        <h3>6. Section-Driven Complexity</h3>
         <p class="help-text">These items come from reviewing the building sections, elevations, and floor plans for conditions that add structural complexity.</p>
         <div class="form-row">
           <div class="form-group">
@@ -292,7 +279,7 @@ function rebuildForm() {
 
       <!-- 8) Lateral Complexity -->
       <div class="form-section">
-        <h3>8. Problematic Brace Lines by Level</h3>
+        <h3>7. Problematic Brace Lines by Level</h3>
         <p class="help-text">For each level, look at the floor plan and identify wall lines that are supposed to resist lateral (wind/seismic) forces but are heavily interrupted by large openings, garage doors, or windows — making it difficult to fit a standard braced or shear wall segment. Count the number of such problematic lines per level.</p>
         <div class="form-row">
           ${layers.filter((k) => k !== 'slab').map((key) => {
@@ -308,7 +295,7 @@ function rebuildForm() {
 
       <!-- 9) Pool -->
       <div class="form-section">
-        <h3>9. Pool</h3>
+        <h3>8. Pool</h3>
         <p class="help-text">If the project includes a pool or spa that requires structural engineering (pool shell, deck, equipment pad, etc.), select Yes and enter an estimated hour count based on the scope.</p>
         <div class="form-row">
           <div class="form-group">
@@ -416,9 +403,9 @@ function bindFormEvents() {
     const show = e.target.value === 'yes';
     document.getElementById('pierAndBeamSection').style.display = show ? '' : 'none';
     if (show) {
-      const cdtInput = document.getElementById('concreteDetailTypes');
-      if (parseInt(cdtInput.value) < 1) {
-        cdtInput.value = 1;
+      const minorInput = document.getElementById('minorConcreteDetails');
+      if (parseInt(minorInput.value) < 1) {
+        minorInput.value = 1;
       }
     }
   });
@@ -442,10 +429,21 @@ function bindFormEvents() {
     });
   });
 
-  // Retaining 12+ toggle
-  document.getElementById('retaining12plus').addEventListener('change', (e) => {
-    const show = e.target.value === 'yes';
-    document.getElementById('retaining12plusHoursGroup').style.display = show ? '' : 'none';
+  // Manual concrete detail — add
+  document.getElementById('btnAddManualConcrete').addEventListener('click', () => {
+    readFormIntoState();
+    state.manualConcreteDetails.push({ desc: '', hours: 0 });
+    rebuildForm();
+  });
+
+  // Manual concrete detail — remove
+  document.querySelectorAll('.btn-remove-manual-concrete').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      readFormIntoState();
+      const idx = parseInt(btn.dataset.idx);
+      state.manualConcreteDetails.splice(idx, 1);
+      rebuildForm();
+    });
   });
 
   // Pool toggle — show/hide hours input
@@ -488,14 +486,16 @@ function readFormIntoState() {
   state.roofCount = intOrZero(document.getElementById('roofCount').value);
   state.foundationLevels = intOrZero(document.getElementById('foundationLevels').value);
   state.roofLevels = intOrZero(document.getElementById('roofLevels').value);
-  state.concreteDetailTypes = parseInt(document.getElementById('concreteDetailTypes').value) || 0;
+  state.minorConcreteDetails = parseInt(document.getElementById('minorConcreteDetails').value) || 0;
+  if (state.pierAndBeamPresent && state.minorConcreteDetails < 1) state.minorConcreteDetails = 1;
+  state.majorConcreteDetails = parseInt(document.getElementById('majorConcreteDetails').value) || 0;
+  state.manualConcreteDetails = [];
+  document.querySelectorAll('.manual-concrete-row').forEach((row) => {
+    const desc = row.querySelector('.manual-concrete-desc').value || '';
+    const hours = parseFloat(row.querySelector('.manual-concrete-hrs').value) || 0;
+    state.manualConcreteDetails.push({ desc, hours });
+  });
   state.dollarPerHour = parseFloat(document.getElementById('dollarPerHour').value) || 150;
-
-  state.retaining4to6 = parseInt(document.getElementById('retaining4to6').value) || 0;
-  state.retaining6to10 = parseInt(document.getElementById('retaining6to10').value) || 0;
-  state.retaining10to12 = parseInt(document.getElementById('retaining10to12').value) || 0;
-  state.retaining12plus = document.getElementById('retaining12plus').value === 'yes';
-  state.retaining12plusHours = parseFloat(document.getElementById('retaining12plusHours').value) || 0;
 
   state.discontinuities = parseInt(document.getElementById('discontinuities').value) || 0;
   state.span20to26Count = parseInt(document.getElementById('span20to26Count').value) || 0;
@@ -612,14 +612,11 @@ function calculateAndRender() {
   const roofCountHours = state.roofCount * 1;
   const roofHours = roofLevelHours + roofCountHours;
 
-  const concreteHours = 4 * state.concreteDetailTypes;
-
-  // Retaining walls — counted
-  const ret4to6Hours = state.retaining4to6 * 4;
-  const ret6to10Hours = state.retaining6to10 * 6;
-  const ret10to12Hours = state.retaining10to12 * 8;
-  const ret12plusHours = state.retaining12plus ? state.retaining12plusHours : 0;
-  const retainingHours = ret4to6Hours + ret6to10Hours + ret10to12Hours + ret12plusHours;
+  // Concrete details
+  const minorConcreteHours = 3 * state.minorConcreteDetails;
+  const majorConcreteHours = 6 * state.majorConcreteDetails;
+  const manualConcreteHours = (state.manualConcreteDetails || []).reduce((sum, item) => sum + (item.hours || 0), 0);
+  const concreteHours = minorConcreteHours + majorConcreteHours + manualConcreteHours;
 
   work.push({ label: 'Fixed setup', detail: '', value: formatNum(setupHours) + ' hrs' });
   work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 2 hrs + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
@@ -630,17 +627,14 @@ function calculateAndRender() {
     work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 3 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
   }
   work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
-  work.push({ label: 'Concrete detail types', detail: `${state.concreteDetailTypes} × 4 hrs`, value: formatNum(concreteHours) + ' hrs' });
+  const concreteParts = [];
+  if (state.minorConcreteDetails > 0) concreteParts.push(`${state.minorConcreteDetails} minor × 3 hrs = ${formatNum(minorConcreteHours)}`);
+  if (state.majorConcreteDetails > 0) concreteParts.push(`${state.majorConcreteDetails} major × 6 hrs = ${formatNum(majorConcreteHours)}`);
+  if (manualConcreteHours > 0) concreteParts.push(`manual: ${formatNum(manualConcreteHours)} hrs`);
+  work.push({ label: 'Concrete details', detail: concreteParts.length ? concreteParts.join(', ') : 'none', value: formatNum(concreteHours) + ' hrs' });
 
-  const retParts = [];
-  if (state.retaining4to6 > 0) retParts.push(`4–6 ft: ${state.retaining4to6} × 4 = ${formatNum(ret4to6Hours)}`);
-  if (state.retaining6to10 > 0) retParts.push(`6–10 ft: ${state.retaining6to10} × 6 = ${formatNum(ret6to10Hours)}`);
-  if (state.retaining10to12 > 0) retParts.push(`10–12 ft: ${state.retaining10to12} × 8 = ${formatNum(ret10to12Hours)}`);
-  if (state.retaining12plus) retParts.push(`12+ ft: manual ${formatNum(ret12plusHours)}`);
-  work.push({ label: 'Retaining walls', detail: retParts.length ? retParts.join(', ') : 'none', value: formatNum(retainingHours) + ' hrs' });
-
-  const baseHours = setupHours + foundationHours + framingSquareHours + pierAndBeamHours + roofHours + concreteHours + retainingHours;
-  const baseParts = [setupHours, foundationHours, framingSquareHours, pierAndBeamHours, roofHours, concreteHours, retainingHours].map(formatNum).join(' + ');
+  const baseHours = setupHours + foundationHours + framingSquareHours + pierAndBeamHours + roofHours + concreteHours;
+  const baseParts = [setupHours, foundationHours, framingSquareHours, pierAndBeamHours, roofHours, concreteHours].map(formatNum).join(' + ');
   work.push({ label: 'Base Hours Total', detail: baseParts, value: formatNum(baseHours) + ' hrs', bold: true });
 
   // ----- Step 3: Lateral Hours -----
