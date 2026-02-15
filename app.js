@@ -35,16 +35,14 @@ let state = {
   manualConcreteDetails: [],
   dollarPerHour: 150,
   discontinuities: 0,
-  span20to26Count: 0,
-  spanOver26Count: 0,
+  span16to24Count: 0,
+  spanOver24Count: 0,
   vaultZones: 0,
   plateHeightSets: 1,
   voidsPenetrations: 0,
   cantileverAreas: 0,
-  foundationStepRuns: 0,
   problematicBraceLines: { level1: 0, level2: 0, level3: 0, level4: 0 },
-  poolPresent: false,
-  poolHours: 12,
+  specialtyDetails: [],
   pierAndBeamPresent: false,
   pierAndBeamCorners: [4],
 };
@@ -62,16 +60,14 @@ function resetState() {
     manualConcreteDetails: [],
     dollarPerHour: 150,
     discontinuities: 0,
-    span20to26Count: 0,
-    spanOver26Count: 0,
+    span16to24Count: 0,
+    spanOver24Count: 0,
     vaultZones: 0,
     plateHeightSets: 1,
     voidsPenetrations: 0,
     cantileverAreas: 0,
-    foundationStepRuns: 0,
     problematicBraceLines: { level1: 0, level2: 0, level3: 0, level4: 0 },
-    poolPresent: false,
-    poolHours: 12,
+    specialtyDetails: [],
     pierAndBeamPresent: false,
     pierAndBeamCorners: [4],
   };
@@ -226,18 +222,18 @@ function rebuildForm() {
         </div>
       </div>
 
-      <!-- 6) Long-span Counts -->
+      <!-- 5) Long-span Counts -->
       <div class="form-section">
         <h3>5. Long-Span Counts</h3>
-        <p class="help-text">Look at the dimension strings on the floor plans. Count each room or open area where the clear span between supports (walls or columns) falls in these ranges. For example, a large great room dimensioned at 22 ft wide counts once under 20–26 ft.</p>
+        <p class="help-text">Look at the dimension strings on the floor plans. Count each room or open area where the clear span between supports (walls or columns) falls in these ranges. Spans under 16 ft are considered normal and already covered by the framing square rate.</p>
         <div class="form-row">
           <div class="form-group">
-            <label for="span20to26Count">Spans 20–26 ft</label>
-            <input type="number" id="span20to26Count" min="0" value="${state.span20to26Count}">
+            <label for="span16to24Count">Spans 16–24 ft</label>
+            <input type="number" id="span16to24Count" min="0" value="${state.span16to24Count}">
           </div>
           <div class="form-group">
-            <label for="spanOver26Count">Spans &gt;26 ft</label>
-            <input type="number" id="spanOver26Count" min="0" value="${state.spanOver26Count}">
+            <label for="spanOver24Count">Spans &gt;24 ft</label>
+            <input type="number" id="spanOver24Count" min="0" value="${state.spanOver24Count}">
           </div>
         </div>
       </div>
@@ -268,13 +264,6 @@ function rebuildForm() {
           </div>
         </div>
         <p class="help-text"><strong>Big penetrations / voids:</strong> Count large openings through floor or roof structure — stairwells, double-height spaces, large skylights, or chimney chases. Ignore standard MEP penetrations. <strong>Cantilever areas:</strong> Count each location where the floor or roof structure extends more than 2 ft past the supporting wall below (bay windows, balconies, bump-outs).</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="foundationStepRuns">Major Foundation Step Runs (&ge;12 in.)</label>
-            <input type="number" id="foundationStepRuns" min="0" value="${state.foundationStepRuns}">
-          </div>
-        </div>
-        <p class="help-text">Look at the foundation plan or site grading. Count each run where the foundation steps down 12 inches or more to follow sloping grade. A single continuous step counts as one run.</p>
       </div>
 
       <!-- 8) Lateral Complexity -->
@@ -293,23 +282,28 @@ function rebuildForm() {
         </div>
       </div>
 
-      <!-- 9) Pool -->
+      <!-- 8) Specialty Details -->
       <div class="form-section">
-        <h3>8. Pool</h3>
-        <p class="help-text">If the project includes a pool or spa that requires structural engineering (pool shell, deck, equipment pad, etc.), select Yes and enter an estimated hour count based on the scope.</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="poolPresent">Pool Present?</label>
-            <select id="poolPresent">
-              <option value="no" ${!state.poolPresent ? 'selected' : ''}>No</option>
-              <option value="yes" ${state.poolPresent ? 'selected' : ''}>Yes</option>
-            </select>
-          </div>
-          <div class="form-group" id="poolHoursGroup" style="${state.poolPresent ? '' : 'display:none'}">
-            <label for="poolHours">Pool Hours (manual)</label>
-            <input type="number" id="poolHours" min="0" step="0.5" value="${state.poolHours}">
-          </div>
+        <h3>8. Specialty Details</h3>
+        <p class="help-text">Use this section for any additional scope items that require manual hour entry — swimming pools, ornamental staircases, unusually large cantilevers, high-risk conditions, or anything else not captured above. Click "Add Detail" and enter a description and estimated hours for each.</p>
+        <div id="specialtyDetailsList">
+          ${(state.specialtyDetails || []).map((item, idx) => `
+            <div class="form-row specialty-detail-row" data-idx="${idx}">
+              <div class="form-group" style="flex:2">
+                <label>Description</label>
+                <input type="text" class="specialty-desc" data-idx="${idx}" value="${item.desc || ''}">
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Hours</label>
+                <input type="number" class="specialty-hrs" data-idx="${idx}" min="0" step="0.5" value="${item.hours || 0}">
+              </div>
+              <div class="form-group" style="flex:0; align-self:flex-end;">
+                <button class="btn-remove-specialty" data-idx="${idx}" title="Remove">&times;</button>
+              </div>
+            </div>
+          `).join('')}
         </div>
+        <button class="btn-small" id="btnAddSpecialty">+ Add Detail</button>
       </div>
 
       <div class="form-actions">
@@ -446,10 +440,21 @@ function bindFormEvents() {
     });
   });
 
-  // Pool toggle — show/hide hours input
-  document.getElementById('poolPresent').addEventListener('change', (e) => {
-    const show = e.target.value === 'yes';
-    document.getElementById('poolHoursGroup').style.display = show ? '' : 'none';
+  // Specialty details — add
+  document.getElementById('btnAddSpecialty').addEventListener('click', () => {
+    readFormIntoState();
+    state.specialtyDetails.push({ desc: '', hours: 0 });
+    rebuildForm();
+  });
+
+  // Specialty details — remove
+  document.querySelectorAll('.btn-remove-specialty').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      readFormIntoState();
+      const idx = parseInt(btn.dataset.idx);
+      state.specialtyDetails.splice(idx, 1);
+      rebuildForm();
+    });
   });
 
   // Calculate
@@ -498,14 +503,13 @@ function readFormIntoState() {
   state.dollarPerHour = parseFloat(document.getElementById('dollarPerHour').value) || 150;
 
   state.discontinuities = parseInt(document.getElementById('discontinuities').value) || 0;
-  state.span20to26Count = parseInt(document.getElementById('span20to26Count').value) || 0;
-  state.spanOver26Count = parseInt(document.getElementById('spanOver26Count').value) || 0;
+  state.span16to24Count = parseInt(document.getElementById('span16to24Count').value) || 0;
+  state.spanOver24Count = parseInt(document.getElementById('spanOver24Count').value) || 0;
 
   state.vaultZones = parseInt(document.getElementById('vaultZones').value) || 0;
   state.plateHeightSets = parseInt(document.getElementById('plateHeightSets').value) || 1;
   state.voidsPenetrations = parseInt(document.getElementById('voidsPenetrations').value) || 0;
   state.cantileverAreas = parseInt(document.getElementById('cantileverAreas').value) || 0;
-  state.foundationStepRuns = parseInt(document.getElementById('foundationStepRuns').value) || 0;
 
   const layers = getLayerKeys().filter((k) => k !== 'slab');
   layers.forEach((key) => {
@@ -516,8 +520,12 @@ function readFormIntoState() {
     state.problematicBraceLines['level' + i] = 0;
   }
 
-  state.poolPresent = document.getElementById('poolPresent').value === 'yes';
-  state.poolHours = parseFloat(document.getElementById('poolHours').value) || 0;
+  state.specialtyDetails = [];
+  document.querySelectorAll('.specialty-detail-row').forEach((row) => {
+    const desc = row.querySelector('.specialty-desc').value || '';
+    const hours = parseFloat(row.querySelector('.specialty-hrs').value) || 0;
+    state.specialtyDetails.push({ desc, hours });
+  });
 
   state.pierAndBeamPresent = document.getElementById('pierAndBeamPresent').value === 'yes';
   state.pierAndBeamCorners = [];
@@ -599,8 +607,8 @@ function calculateAndRender() {
 
   const setupHours = 4;
 
-  // Foundation: 2 hrs per level + 1 hr per foundation square
-  const fndLevelHours = state.foundationLevels * 2;
+  // Foundation: 1 hr per level + 1 hr per foundation square
+  const fndLevelHours = state.foundationLevels * 1;
   const fndSquareHours = foundationSquares * 1;
   const foundationHours = fndLevelHours + fndSquareHours;
 
@@ -619,7 +627,7 @@ function calculateAndRender() {
   const concreteHours = minorConcreteHours + majorConcreteHours + manualConcreteHours;
 
   work.push({ label: 'Fixed setup', detail: '', value: formatNum(setupHours) + ' hrs' });
-  work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 2 hrs + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
+  work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 1 hr + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
   work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 3 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
 
   const pierAndBeamHours = state.pierAndBeamPresent ? 3 * pierAndBeamSquares : 0;
@@ -667,29 +675,27 @@ function calculateAndRender() {
   work.push({ heading: 'Step 4: Modifier Hours' });
 
   const discHours = 4 * state.discontinuities;
-  const span20Hours = 2 * state.span20to26Count;
-  const spanOver26Hours = 6 * state.spanOver26Count;
+  const span16Hours = 2 * state.span16to24Count;
+  const spanOver24Hours = 6 * state.spanOver24Count;
   const vaultHours = 3 * state.vaultZones;
   const plateExtra = Math.max(state.plateHeightSets - 1, 0);
   const plateHours = 2 * plateExtra;
   const voidHours = 1.5 * state.voidsPenetrations;
   const cantileverHours = 1.5 * state.cantileverAreas;
-  const stepHours = 0.75 * state.foundationStepRuns;
-  const poolHours = state.poolPresent ? state.poolHours : 0;
+  const specialtyHours = (state.specialtyDetails || []).reduce((sum, item) => sum + (item.hours || 0), 0);
 
   work.push({ label: 'Discontinuities', detail: `${state.discontinuities} × 4 hrs`, value: formatNum(discHours) + ' hrs' });
-  work.push({ label: 'Spans 20–26 ft', detail: `${state.span20to26Count} × 2 hrs`, value: formatNum(span20Hours) + ' hrs' });
-  work.push({ label: 'Spans >26 ft', detail: `${state.spanOver26Count} × 6 hrs`, value: formatNum(spanOver26Hours) + ' hrs' });
+  work.push({ label: 'Spans 16–24 ft', detail: `${state.span16to24Count} × 2 hrs`, value: formatNum(span16Hours) + ' hrs' });
+  work.push({ label: 'Spans >24 ft', detail: `${state.spanOver24Count} × 6 hrs`, value: formatNum(spanOver24Hours) + ' hrs' });
   work.push({ label: 'Vault zones', detail: `${state.vaultZones} × 3 hrs`, value: formatNum(vaultHours) + ' hrs' });
   work.push({ label: 'Plate-height sets', detail: `(${state.plateHeightSets} − 1) × 2 hrs = ${plateExtra} × 2`, value: formatNum(plateHours) + ' hrs' });
   work.push({ label: 'Voids / penetrations', detail: `${state.voidsPenetrations} × 1.5 hrs`, value: formatNum(voidHours) + ' hrs' });
   work.push({ label: 'Cantilever areas', detail: `${state.cantileverAreas} × 1.5 hrs`, value: formatNum(cantileverHours) + ' hrs' });
-  work.push({ label: 'Foundation step runs', detail: `${state.foundationStepRuns} × 0.75 hrs`, value: formatNum(stepHours) + ' hrs' });
-  work.push({ label: 'Pool', detail: state.poolPresent ? `manual: ${formatNum(state.poolHours)} hrs` : 'no', value: formatNum(poolHours) + ' hrs' });
+  work.push({ label: 'Specialty', detail: specialtyHours > 0 ? `manual: ${formatNum(specialtyHours)} hrs` : 'none', value: formatNum(specialtyHours) + ' hrs' });
   work.push({ label: 'Lateral (from Step 3)', detail: '', value: formatNum(lateralHours) + ' hrs' });
 
-  const modifierHours = discHours + span20Hours + spanOver26Hours + vaultHours + plateHours + voidHours + cantileverHours + stepHours + poolHours + lateralHours;
-  const modParts = [discHours, span20Hours, spanOver26Hours, vaultHours, plateHours, voidHours, cantileverHours, stepHours, poolHours, lateralHours].map(formatNum).join(' + ');
+  const modifierHours = discHours + span16Hours + spanOver24Hours + vaultHours + plateHours + voidHours + cantileverHours + specialtyHours + lateralHours;
+  const modParts = [discHours, span16Hours, spanOver24Hours, vaultHours, plateHours, voidHours, cantileverHours, specialtyHours, lateralHours].map(formatNum).join(' + ');
   work.push({ label: 'Modifier Hours Total', detail: modParts, value: formatNum(modifierHours) + ' hrs', bold: true });
 
   // ----- Step 5: Subtotal & Liability Multiplier -----
