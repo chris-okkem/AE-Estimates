@@ -309,6 +309,8 @@ function rebuildForm() {
       <div class="form-actions">
         <button class="btn btn-primary" id="btnCalculate">Calculate Estimate</button>
         <button class="btn btn-secondary" id="btnReset">Reset</button>
+        <button class="btn btn-secondary" id="btnExport">Export Estimate</button>
+        <button class="btn btn-secondary" id="btnImport">Import Estimate</button>
       </div>
     </div>
 
@@ -468,6 +470,17 @@ function bindFormEvents() {
     resetState();
     rebuildForm();
   });
+
+  // Export estimate
+  document.getElementById('btnExport').addEventListener('click', () => {
+    readFormIntoState();
+    exportEstimate();
+  });
+
+  // Import estimate
+  document.getElementById('btnImport').addEventListener('click', () => {
+    importEstimate();
+  });
 }
 
 function readFormIntoState() {
@@ -533,6 +546,68 @@ function readFormIntoState() {
     state.pierAndBeamCorners.push(parseInt(input.value) || 4);
   });
   if (state.pierAndBeamCorners.length === 0) state.pierAndBeamCorners = [4];
+}
+
+// =========================================================
+// Export / Import
+// =========================================================
+
+function exportEstimate() {
+  const name = prompt('Project name for this estimate:', 'Untitled Project');
+  if (name === null) return; // user cancelled
+
+  const wrapper = {
+    version: 1,
+    name: name || 'Untitled Project',
+    date: new Date().toISOString(),
+    state: state,
+  };
+
+  const json = JSON.stringify(wrapper, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const safeName = (name || 'Untitled Project').replace(/[^a-zA-Z0-9 _\-]/g, '');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeName + ' - Estimate.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importEstimate() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const wrapper = JSON.parse(reader.result);
+        const imported = wrapper.state || wrapper;
+
+        if (typeof imported.stories !== 'number') {
+          alert('This file does not appear to be a valid estimate.');
+          return;
+        }
+
+        state = imported;
+        initCornerOutlines();
+        rebuildForm();
+      } catch (e) {
+        alert('Could not read file: ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  input.click();
 }
 
 // =========================================================
