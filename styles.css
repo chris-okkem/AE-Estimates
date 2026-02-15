@@ -64,6 +64,22 @@ main {
   padding: 2rem;
 }
 
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.form-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .estimate-form h2 {
   font-size: 1.25rem;
   margin-bottom: 1.5rem;

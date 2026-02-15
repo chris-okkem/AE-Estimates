@@ -108,7 +108,10 @@ function rebuildForm() {
 
   app.innerHTML = `
     <div class="estimate-form">
-      <h2>Residential Structural Estimate</h2>
+      <div class="form-header">
+        <h2>Residential Structural Estimate</h2>
+        <button class="btn btn-secondary" id="btnImport">Import Estimate</button>
+      </div>
 
       <!-- Section 1: Base Geometry -->
       <div class="form-section">
@@ -309,8 +312,6 @@ function rebuildForm() {
       <div class="form-actions">
         <button class="btn btn-primary" id="btnCalculate">Calculate Estimate</button>
         <button class="btn btn-secondary" id="btnReset">Reset</button>
-        <button class="btn btn-secondary" id="btnExport">Export Estimate</button>
-        <button class="btn btn-secondary" id="btnImport">Import Estimate</button>
       </div>
     </div>
 
@@ -469,12 +470,6 @@ function bindFormEvents() {
   document.getElementById('btnReset').addEventListener('click', () => {
     resetState();
     rebuildForm();
-  });
-
-  // Export estimate
-  document.getElementById('btnExport').addEventListener('click', () => {
-    readFormIntoState();
-    exportEstimate();
   });
 
   // Import estimate
@@ -836,6 +831,7 @@ function renderOutput(work, totalHours, roundedHours, fee) {
       </div>
       <div class="summary-item summary-action">
         <button class="btn btn-email" id="btnGenerateEmail">Generate Email</button>
+        <button class="btn btn-email" id="btnExport">Export Estimate</button>
       </div>
     </div>
     <h2>Detailed Breakdown</h2>
@@ -859,6 +855,10 @@ function renderOutput(work, totalHours, roundedHours, fee) {
 
   document.getElementById('btnGenerateEmail').addEventListener('click', () => {
     openEmailModal();
+  });
+
+  document.getElementById('btnExport').addEventListener('click', () => {
+    exportEstimate();
   });
 }
 
