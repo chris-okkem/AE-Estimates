@@ -396,7 +396,7 @@ main {
 /* Generate Email button in summary banner */
 .summary-action {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.5rem;
   margin-left: auto;
 }
@@ -408,6 +408,8 @@ main {
   padding: 0.5rem 1.25rem;
   border-radius: 6px;
   white-space: nowrap;
+  width: 100%;
+  text-align: center;
 }
 
 .btn-email:hover {
