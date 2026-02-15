@@ -604,8 +604,8 @@ function calculateAndRender() {
   const fndSquareHours = foundationSquares * 1;
   const foundationHours = fndLevelHours + fndSquareHours;
 
-  // Framing: 4 hrs per square
-  const framingSquareHours = 4 * framingSquares;
+  // Framing: 3 hrs per square
+  const framingSquareHours = 3 * framingSquares;
 
   // Roof: 2 hrs per level + 1 hr per roof count
   const roofLevelHours = state.roofLevels * 2;
@@ -623,11 +623,11 @@ function calculateAndRender() {
 
   work.push({ label: 'Fixed setup', detail: '', value: formatNum(setupHours) + ' hrs' });
   work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 2 hrs + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
-  work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 4 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
+  work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 3 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
 
-  const pierAndBeamHours = state.pierAndBeamPresent ? 4 * pierAndBeamSquares : 0;
+  const pierAndBeamHours = state.pierAndBeamPresent ? 3 * pierAndBeamSquares : 0;
   if (state.pierAndBeamPresent) {
-    work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 4 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
+    work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 3 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
   }
   work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 2 hrs + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
   work.push({ label: 'Concrete detail types', detail: `${state.concreteDetailTypes} × 4 hrs`, value: formatNum(concreteHours) + ' hrs' });
