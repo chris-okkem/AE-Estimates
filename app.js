@@ -24,6 +24,7 @@ document.getElementById('estimate-nav').addEventListener('click', (e) => {
 // =========================================================
 
 let state = {
+  projectName: '',
   stories: 1,
   squareFootage: 0,
   cornerOutlines: {},
@@ -45,10 +46,12 @@ let state = {
   specialtyDetails: [],
   pierAndBeamPresent: false,
   pierAndBeamCorners: [4],
+  lateralRequired: true,
 };
 
 function resetState() {
   state = {
+    projectName: '',
     stories: 1,
     squareFootage: 0,
     cornerOutlines: {},
@@ -70,6 +73,7 @@ function resetState() {
     specialtyDetails: [],
     pierAndBeamPresent: false,
     pierAndBeamCorners: [4],
+    lateralRequired: true,
   };
   initCornerOutlines();
 }
@@ -111,6 +115,16 @@ function rebuildForm() {
       <div class="form-header">
         <h2>Residential Structural Estimate</h2>
         <button class="btn btn-secondary" id="btnImport">Import Estimate</button>
+      </div>
+
+      <!-- Project Name -->
+      <div class="form-section">
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label for="projectName">Project Name</label>
+            <input type="text" id="projectName" placeholder="e.g. Smith Residence" value="${state.projectName || ''}">
+          </div>
+        </div>
       </div>
 
       <!-- Section 1: Base Geometry -->
@@ -271,17 +285,28 @@ function rebuildForm() {
 
       <!-- 8) Lateral Complexity -->
       <div class="form-section">
-        <h3>7. Problematic Brace Lines by Level</h3>
-        <p class="help-text">For each level, look at the floor plan and identify wall lines that are supposed to resist lateral (wind/seismic) forces but are heavily interrupted by large openings, garage doors, or windows — making it difficult to fit a standard braced or shear wall segment. Count the number of such problematic lines per level.</p>
+        <h3>7. Lateral Analysis</h3>
         <div class="form-row">
-          ${layers.filter((k) => k !== 'slab').map((key) => {
-            const num = key.replace('level', '');
-            const val = state.problematicBraceLines[key] || 0;
-            return `<div class="form-group">
-              <label for="brace_${key}">Level ${num}</label>
-              <input type="number" id="brace_${key}" min="0" value="${val}">
-            </div>`;
-          }).join('')}
+          <div class="form-group">
+            <label for="lateralRequired">Lateral Required?</label>
+            <select id="lateralRequired">
+              <option value="yes" ${state.lateralRequired ? 'selected' : ''}>Yes</option>
+              <option value="no" ${!state.lateralRequired ? 'selected' : ''}>No</option>
+            </select>
+          </div>
+        </div>
+        <div id="lateralSection" style="${state.lateralRequired ? '' : 'display:none'}">
+          <p class="help-text">For each level, look at the floor plan and identify wall lines that are supposed to resist lateral (wind/seismic) forces but are heavily interrupted by large openings, garage doors, or windows — making it difficult to fit a standard braced or shear wall segment. Count the number of such problematic lines per level.</p>
+          <div class="form-row">
+            ${layers.filter((k) => k !== 'slab').map((key) => {
+              const num = key.replace('level', '');
+              const val = state.problematicBraceLines[key] || 0;
+              return `<div class="form-group">
+                <label for="brace_${key}">Level ${num}</label>
+                <input type="number" id="brace_${key}" min="0" value="${val}">
+              </div>`;
+            }).join('')}
+          </div>
         </div>
       </div>
 
@@ -335,7 +360,7 @@ function renderCornerLayer(key) {
         ${outlines.map((count, idx) => `
           <div class="outline-row">
             <label>Outline ${idx + 1} corners</label>
-            <input type="number" class="corner-input" data-layer="${key}" data-idx="${idx}" min="4" step="2" value="${count}">
+            <input type="number" class="corner-input" data-layer="${key}" data-idx="${idx}" min="0" step="1" value="${count}">
             ${outlines.length > 1 ? `<button class="btn-remove-outline" data-layer="${key}" data-idx="${idx}" title="Remove outline">&times;</button>` : ''}
           </div>
         `).join('')}
@@ -356,7 +381,7 @@ function renderPierAndBeamOutlines() {
         ${outlines.map((count, idx) => `
           <div class="outline-row">
             <label>Outline ${idx + 1} corners</label>
-            <input type="number" class="pb-corner-input" data-idx="${idx}" min="4" step="2" value="${count}">
+            <input type="number" class="pb-corner-input" data-idx="${idx}" min="0" step="1" value="${count}">
             ${outlines.length > 1 ? `<button class="btn-remove-pb-outline" data-idx="${idx}" title="Remove outline">&times;</button>` : ''}
           </div>
         `).join('')}
@@ -393,6 +418,12 @@ function bindFormEvents() {
       state.cornerOutlines[layer].splice(idx, 1);
       rebuildForm();
     });
+  });
+
+  // Lateral toggle
+  document.getElementById('lateralRequired').addEventListener('change', (e) => {
+    const show = e.target.value === 'yes';
+    document.getElementById('lateralSection').style.display = show ? '' : 'none';
   });
 
   // Pier and beam toggle
@@ -479,6 +510,7 @@ function bindFormEvents() {
 }
 
 function readFormIntoState() {
+  state.projectName = document.getElementById('projectName').value || '';
   state.stories = parseInt(document.getElementById('stories').value) || 1;
 
   // Corner outlines
@@ -486,7 +518,8 @@ function readFormIntoState() {
     const layer = input.dataset.layer;
     const idx = parseInt(input.dataset.idx);
     if (!state.cornerOutlines[layer]) state.cornerOutlines[layer] = [];
-    state.cornerOutlines[layer][idx] = parseInt(input.value) || 4;
+    const val = parseInt(input.value);
+    state.cornerOutlines[layer][idx] = isNaN(val) ? 4 : val;
   });
 
   // Clean up layers that no longer exist
@@ -519,6 +552,8 @@ function readFormIntoState() {
   state.voidsPenetrations = parseInt(document.getElementById('voidsPenetrations').value) || 0;
   state.cantileverAreas = parseInt(document.getElementById('cantileverAreas').value) || 0;
 
+  state.lateralRequired = document.getElementById('lateralRequired').value === 'yes';
+
   const layers = getLayerKeys().filter((k) => k !== 'slab');
   layers.forEach((key) => {
     const el = document.getElementById('brace_' + key);
@@ -538,7 +573,8 @@ function readFormIntoState() {
   state.pierAndBeamPresent = document.getElementById('pierAndBeamPresent').value === 'yes';
   state.pierAndBeamCorners = [];
   document.querySelectorAll('.pb-corner-input').forEach((input) => {
-    state.pierAndBeamCorners.push(parseInt(input.value) || 4);
+    const val = parseInt(input.value);
+    state.pierAndBeamCorners.push(isNaN(val) ? 4 : val);
   });
   if (state.pierAndBeamCorners.length === 0) state.pierAndBeamCorners = [4];
 }
@@ -547,22 +583,39 @@ function readFormIntoState() {
 // Export / Import
 // =========================================================
 
-function exportEstimate() {
-  const name = prompt('Project name for this estimate:', 'Untitled Project');
-  if (name === null) return; // user cancelled
+async function exportEstimate() {
+  const name = state.projectName || 'Untitled Project';
+  const safeName = name.replace(/[^a-zA-Z0-9 _\-]/g, '');
 
   const wrapper = {
     version: 1,
-    name: name || 'Untitled Project',
+    name: name,
     date: new Date().toISOString(),
     state: state,
   };
 
   const json = JSON.stringify(wrapper, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
 
-  const safeName = (name || 'Untitled Project').replace(/[^a-zA-Z0-9 _\-]/g, '');
+  // Try File System Access API (lets user pick folder/filename)
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: safeName + ' - Estimate.json',
+        types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // user cancelled
+      // Fall through to legacy download
+    }
+  }
+
+  // Fallback for browsers without File System Access API
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = safeName + ' - Estimate.json';
@@ -700,9 +753,9 @@ function calculateAndRender() {
   work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 1 hr + ${formatNum(foundationSquares)} sq × 1 hr`, value: formatNum(foundationHours) + ' hrs' });
   work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 3 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
 
-  const pierAndBeamHours = state.pierAndBeamPresent ? 3 * pierAndBeamSquares : 0;
+  const pierAndBeamHours = state.pierAndBeamPresent ? 2 * pierAndBeamSquares : 0;
   if (state.pierAndBeamPresent) {
-    work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 3 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
+    work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 2 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
   }
   work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
   const concreteParts = [];
@@ -716,30 +769,36 @@ function calculateAndRender() {
   work.push({ label: 'Base Hours Total', detail: baseParts, value: formatNum(baseHours) + ' hrs', bold: true });
 
   // ----- Step 3: Lateral Hours -----
-  work.push({ heading: 'Step 3: Lateral Hours' });
-  work.push({ note: '2 hrs per level base + weighted problematic brace lines × 4 hrs' });
+  let lateralHours = 0;
+  if (state.lateralRequired) {
+    work.push({ heading: 'Step 3: Lateral Hours' });
+    work.push({ note: '2 hrs per level base + weighted problematic brace lines × 4 hrs' });
 
-  const lateralBaseHours = 2 * state.stories;
-  work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 2 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
+    const lateralBaseHours = 2 * state.stories;
+    work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 2 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
 
-  const L1 = state.problematicBraceLines.level1 || 0;
-  const L2 = state.problematicBraceLines.level2 || 0;
-  const L3 = state.problematicBraceLines.level3 || 0;
-  const L4 = state.problematicBraceLines.level4 || 0;
+    const L1 = state.problematicBraceLines.level1 || 0;
+    const L2 = state.problematicBraceLines.level2 || 0;
+    const L3 = state.problematicBraceLines.level3 || 0;
+    const L4 = state.problematicBraceLines.level4 || 0;
 
-  const weightedParts = [];
-  const weightedValues = [];
-  if (state.stories >= 1) { weightedParts.push(`L1: ${L1} × 1.0 = ${formatNum(L1 * 1.0)}`); weightedValues.push(L1 * 1.0); }
-  if (state.stories >= 2) { weightedParts.push(`L2: ${L2} × 1.5 = ${formatNum(L2 * 1.5)}`); weightedValues.push(L2 * 1.5); }
-  if (state.stories >= 3) { weightedParts.push(`L3: ${L3} × 2.0 = ${formatNum(L3 * 2.0)}`); weightedValues.push(L3 * 2.0); }
-  if (state.stories >= 4) { weightedParts.push(`L4: ${L4} × 2.5 = ${formatNum(L4 * 2.5)}`); weightedValues.push(L4 * 2.5); }
+    const weightedParts = [];
+    const weightedValues = [];
+    if (state.stories >= 1) { weightedParts.push(`L1: ${L1} × 1.0 = ${formatNum(L1 * 1.0)}`); weightedValues.push(L1 * 1.0); }
+    if (state.stories >= 2) { weightedParts.push(`L2: ${L2} × 1.5 = ${formatNum(L2 * 1.5)}`); weightedValues.push(L2 * 1.5); }
+    if (state.stories >= 3) { weightedParts.push(`L3: ${L3} × 2.0 = ${formatNum(L3 * 2.0)}`); weightedValues.push(L3 * 2.0); }
+    if (state.stories >= 4) { weightedParts.push(`L4: ${L4} × 2.5 = ${formatNum(L4 * 2.5)}`); weightedValues.push(L4 * 2.5); }
 
-  const weightedSum = weightedValues.reduce((a, b) => a + b, 0);
-  const lateralHours = lateralBaseHours + 4 * weightedSum;
+    const weightedSum = weightedValues.reduce((a, b) => a + b, 0);
+    lateralHours = lateralBaseHours + 4 * weightedSum;
 
-  weightedParts.forEach((p) => work.push({ label: '', detail: p, value: '' }));
-  work.push({ label: 'Weighted sum', detail: weightedValues.map(formatNum).join(' + '), value: formatNum(weightedSum) });
-  work.push({ label: 'Lateral Hours', detail: `${formatNum(lateralBaseHours)} + 4 × ${formatNum(weightedSum)}`, value: formatNum(lateralHours) + ' hrs', bold: true });
+    weightedParts.forEach((p) => work.push({ label: '', detail: p, value: '' }));
+    work.push({ label: 'Weighted sum', detail: weightedValues.map(formatNum).join(' + '), value: formatNum(weightedSum) });
+    work.push({ label: 'Lateral Hours', detail: `${formatNum(lateralBaseHours)} + 4 × ${formatNum(weightedSum)}`, value: formatNum(lateralHours) + ' hrs', bold: true });
+  } else {
+    work.push({ heading: 'Step 3: Lateral Hours (Not Required)' });
+    work.push({ label: 'Lateral Hours', detail: 'Lateral analysis not required', value: '0 hrs', bold: true });
+  }
 
   // ----- Step 4: Modifier Hours -----
   work.push({ heading: 'Step 4: Modifier Hours' });
@@ -780,19 +839,14 @@ function calculateAndRender() {
   const totalHours = subtotalHours * liabilityMultiplier;
   work.push({ label: 'Adjusted total', detail: `${formatNum(subtotalHours)} × ${formatNum(liabilityMultiplier)}`, value: formatNum(totalHours) + ' hrs', bold: true });
 
-  const roundedUp = Math.ceil(totalHours / 2) * 2;
-  work.push({ label: 'Rounded to nearest 2 hrs', detail: `ceil(${formatNum(totalHours)} / 2) × 2`, value: formatNum(roundedUp) + ' hrs', bold: true });
-
   // Fee
   const rate = state.dollarPerHour;
-  const feeExact = totalHours * rate;
-  const feeRounded = roundedUp * rate;
+  const fee = totalHours * rate;
   work.push({ heading: 'Fee Estimate' });
   work.push({ label: 'Rate', detail: '', value: '$' + formatNum(rate) + ' /hr' });
-  work.push({ label: 'Fee (exact hours)', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(feeExact), bold: false });
-  work.push({ label: 'Fee (rounded hours)', detail: `${formatNum(roundedUp)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(feeRounded), bold: true });
+  work.push({ label: 'Fee', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(fee), bold: true });
 
-  renderOutput(work, totalHours, roundedUp, feeRounded);
+  renderOutput(work, totalHours, rate);
 }
 
 function intOrZero(val) {
@@ -810,24 +864,35 @@ function formatMoney(n) {
 }
 
 let lastCalculatedFee = 0;
+let adjustedHours = 0;
+let currentRate = 0;
 
-function renderOutput(work, totalHours, roundedHours, fee) {
+function updateSummaryFee() {
+  const fee = adjustedHours * currentRate;
   lastCalculatedFee = fee;
+  document.getElementById('summaryHours').textContent = formatNum(adjustedHours);
+  document.getElementById('summaryFee').textContent = '$' + formatMoney(fee);
+}
+
+function renderOutput(work, totalHours, rate) {
+  adjustedHours = totalHours;
+  currentRate = rate;
+  lastCalculatedFee = totalHours * rate;
   const outputDiv = document.getElementById('estimate-output');
 
   let html = `<div class="estimate-output">
     <div class="summary-banner">
       <div class="summary-item">
-        <span class="summary-label">Total Estimated Hours</span>
-        <span class="summary-value">${formatNum(totalHours)}</span>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">Rounded (nearest 2)</span>
-        <span class="summary-value">${formatNum(roundedHours)}</span>
+        <span class="summary-label">Estimated Hours</span>
+        <div class="summary-adjust">
+          <button class="btn-adjust" id="btnHoursDown" title="Decrease hours">−</button>
+          <span class="summary-value" id="summaryHours">${formatNum(totalHours)}</span>
+          <button class="btn-adjust" id="btnHoursUp" title="Increase hours">+</button>
+        </div>
       </div>
       <div class="summary-item">
         <span class="summary-label">Estimated Fee</span>
-        <span class="summary-value">$${formatMoney(fee)}</span>
+        <span class="summary-value" id="summaryFee">$${formatMoney(lastCalculatedFee)}</span>
       </div>
       <div class="summary-item summary-action">
         <button class="btn btn-email" id="btnGenerateEmail">Generate Email</button>
@@ -859,6 +924,18 @@ function renderOutput(work, totalHours, roundedHours, fee) {
 
   document.getElementById('btnExport').addEventListener('click', () => {
     exportEstimate();
+  });
+
+  document.getElementById('btnHoursUp').addEventListener('click', () => {
+    adjustedHours += 1;
+    updateSummaryFee();
+  });
+
+  document.getElementById('btnHoursDown').addEventListener('click', () => {
+    if (adjustedHours >= 1) {
+      adjustedHours -= 1;
+      updateSummaryFee();
+    }
   });
 }
 
