@@ -25,6 +25,7 @@ document.getElementById('estimate-nav').addEventListener('click', (e) => {
 
 let state = {
   projectName: '',
+  notes: '',
   stories: 1,
   squareFootage: 0,
   cornerOutlines: {},
@@ -123,6 +124,12 @@ function rebuildForm() {
           <div class="form-group" style="flex: 1;">
             <label for="projectName">Project Name</label>
             <input type="text" id="projectName" placeholder="e.g. Smith Residence" value="${state.projectName || ''}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label for="notes">Notes</label>
+            <textarea id="notes" rows="3" placeholder="Additional notes...">${state.notes || ''}</textarea>
           </div>
         </div>
       </div>
@@ -511,6 +518,7 @@ function bindFormEvents() {
 
 function readFormIntoState() {
   state.projectName = document.getElementById('projectName').value || '';
+  state.notes = document.getElementById('notes').value || '';
   state.stories = parseInt(document.getElementById('stories').value) || 1;
 
   // Corner outlines
