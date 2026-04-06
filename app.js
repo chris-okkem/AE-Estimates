@@ -35,7 +35,7 @@ let state = {
   minorConcreteDetails: 0,
   majorConcreteDetails: 0,
   manualConcreteDetails: [],
-  dollarPerHour: 150,
+  dollarPerHour: 160,
   discontinuities: 0,
   span16to24Count: 0,
   spanOver24Count: 0,
@@ -62,7 +62,7 @@ function resetState() {
     minorConcreteDetails: 0,
     majorConcreteDetails: 0,
     manualConcreteDetails: [],
-    dollarPerHour: 150,
+    dollarPerHour: 160,
     discontinuities: 0,
     span16to24Count: 0,
     spanOver24Count: 0,
@@ -549,7 +549,7 @@ function readFormIntoState() {
     const hours = parseFloat(row.querySelector('.manual-concrete-hrs').value) || 0;
     state.manualConcreteDetails.push({ desc, hours });
   });
-  state.dollarPerHour = parseFloat(document.getElementById('dollarPerHour').value) || 150;
+  state.dollarPerHour = parseFloat(document.getElementById('dollarPerHour').value) || 160;
 
   state.discontinuities = parseInt(document.getElementById('discontinuities').value) || 0;
   state.span16to24Count = parseInt(document.getElementById('span16to24Count').value) || 0;
@@ -746,9 +746,9 @@ function calculateAndRender() {
   // Framing: 3 hrs per square
   const framingSquareHours = 3 * framingSquares;
 
-  // Roof: 1 hr per level + 1 hr per roof count
+  // Roof: 1 hr per level + 2 hrs per roof count
   const roofLevelHours = state.roofLevels * 1;
-  const roofCountHours = state.roofCount * 1;
+  const roofCountHours = state.roofCount * 2;
   const roofHours = roofLevelHours + roofCountHours;
 
   // Concrete details
@@ -765,7 +765,7 @@ function calculateAndRender() {
   if (state.pierAndBeamPresent) {
     work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 2 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
   }
-  work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
+  work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 2 hrs`, value: formatNum(roofHours) + ' hrs' });
   const concreteParts = [];
   if (state.minorConcreteDetails > 0) concreteParts.push(`${state.minorConcreteDetails} minor × 3 hrs = ${formatNum(minorConcreteHours)}`);
   if (state.majorConcreteDetails > 0) concreteParts.push(`${state.majorConcreteDetails} major × 6 hrs = ${formatNum(majorConcreteHours)}`);
@@ -780,10 +780,10 @@ function calculateAndRender() {
   let lateralHours = 0;
   if (state.lateralRequired) {
     work.push({ heading: 'Step 3: Lateral Hours' });
-    work.push({ note: '2 hrs per level base + weighted problematic brace lines × 4 hrs' });
+    work.push({ note: '3 hrs per level base + weighted problematic brace lines × 4 hrs' });
 
-    const lateralBaseHours = 2 * state.stories;
-    work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 2 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
+    const lateralBaseHours = 3 * state.stories;
+    work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 3 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
 
     const L1 = state.problematicBraceLines.level1 || 0;
     const L2 = state.problematicBraceLines.level2 || 0;
@@ -817,8 +817,8 @@ function calculateAndRender() {
   const vaultHours = 3 * state.vaultZones;
   const plateExtra = Math.max(state.plateHeightSets - 1, 0);
   const plateHours = 2 * plateExtra;
-  const voidHours = 1.5 * state.voidsPenetrations;
-  const cantileverHours = 1.5 * state.cantileverAreas;
+  const voidHours = 2 * state.voidsPenetrations;
+  const cantileverHours = 2 * state.cantileverAreas;
   const specialtyHours = (state.specialtyDetails || []).reduce((sum, item) => sum + (item.hours || 0), 0);
 
   work.push({ label: 'Discontinuities', detail: `${state.discontinuities} × 4 hrs`, value: formatNum(discHours) + ' hrs' });
@@ -826,8 +826,8 @@ function calculateAndRender() {
   work.push({ label: 'Spans >24 ft', detail: `${state.spanOver24Count} × 6 hrs`, value: formatNum(spanOver24Hours) + ' hrs' });
   work.push({ label: 'Vault zones', detail: `${state.vaultZones} × 3 hrs`, value: formatNum(vaultHours) + ' hrs' });
   work.push({ label: 'Plate-height sets', detail: `(${state.plateHeightSets} − 1) × 2 hrs = ${plateExtra} × 2`, value: formatNum(plateHours) + ' hrs' });
-  work.push({ label: 'Voids / penetrations', detail: `${state.voidsPenetrations} × 1.5 hrs`, value: formatNum(voidHours) + ' hrs' });
-  work.push({ label: 'Cantilever areas', detail: `${state.cantileverAreas} × 1.5 hrs`, value: formatNum(cantileverHours) + ' hrs' });
+  work.push({ label: 'Voids / penetrations', detail: `${state.voidsPenetrations} × 2 hrs`, value: formatNum(voidHours) + ' hrs' });
+  work.push({ label: 'Cantilever areas', detail: `${state.cantileverAreas} × 2 hrs`, value: formatNum(cantileverHours) + ' hrs' });
   work.push({ label: 'Specialty', detail: specialtyHours > 0 ? `manual: ${formatNum(specialtyHours)} hrs` : 'none', value: formatNum(specialtyHours) + ' hrs' });
   work.push({ label: 'Lateral (from Step 3)', detail: '', value: formatNum(lateralHours) + ' hrs' });
 
@@ -841,11 +841,11 @@ function calculateAndRender() {
   const subtotalHours = baseHours + modifierHours;
   work.push({ label: 'Base + Modifiers', detail: `${formatNum(baseHours)} + ${formatNum(modifierHours)}`, value: formatNum(subtotalHours) + ' hrs', bold: true });
 
-  const liabilityMultiplier = Math.max((state.squareFootage - 3000) / 10000 + 1, 1);
-  work.push({ label: 'Liability multiplier', detail: `(${formatNum(state.squareFootage)} − 3000) ÷ 10000 + 1 = ${formatNum(liabilityMultiplier)}`, value: '×' + formatNum(liabilityMultiplier) });
+  const coordinationMultiplier = state.squareFootage * 0.00001 + 1;
+  work.push({ label: 'Coordination multiplier', detail: `${formatNum(state.squareFootage)} sf × 0.00001 + 1 = ${formatNum(coordinationMultiplier)}`, value: '×' + formatNum(coordinationMultiplier) });
 
-  const totalHours = subtotalHours * liabilityMultiplier;
-  work.push({ label: 'Adjusted total', detail: `${formatNum(subtotalHours)} × ${formatNum(liabilityMultiplier)}`, value: formatNum(totalHours) + ' hrs', bold: true });
+  const totalHours = subtotalHours * coordinationMultiplier;
+  work.push({ label: 'Adjusted total', detail: `${formatNum(subtotalHours)} × ${formatNum(coordinationMultiplier)}`, value: formatNum(totalHours) + ' hrs', bold: true });
 
   // Fee
   const rate = state.dollarPerHour;
