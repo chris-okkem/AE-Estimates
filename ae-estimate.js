@@ -45,6 +45,27 @@
   let state = makeInitialState();
   const collapsedSections = new Set();
 
+  function makeScope(name, condSf, condSpaces, uncondSf, uncondSpaces) {
+    return {
+      id: 'scope_' + Math.random().toString(36).slice(2, 10),
+      name: name || '',
+      conditionedSf: condSf || 0,
+      conditionedSpaces: condSpaces || 0,
+      unconditionedSf: uncondSf || 0,
+      unconditionedSpaces: uncondSpaces || 0,
+    };
+  }
+
+  function sumScopes(scopes) {
+    return (scopes || []).reduce((acc, s) => {
+      acc.conditionedSf       += (s.conditionedSf || 0);
+      acc.conditionedSpaces   += (s.conditionedSpaces || 0);
+      acc.unconditionedSf     += (s.unconditionedSf || 0);
+      acc.unconditionedSpaces += (s.unconditionedSpaces || 0);
+      return acc;
+    }, { conditionedSf: 0, conditionedSpaces: 0, unconditionedSf: 0, unconditionedSpaces: 0 });
+  }
+
   function makeInitialState() {
     return {
       identity: {
@@ -53,10 +74,7 @@
         projectType: 'new',
       },
       program: {
-        conditionedSf: 3000,
-        conditionedSpaces: 12,
-        unconditionedSf: 600,
-        unconditionedSpaces: 1,
+        scopes: [makeScope('Scope 1', 3000, 12, 600, 1)],
         buildGrade: 'mid_custom',
         structuralComplexity: 'medium',
         buildingCategory: '7',
@@ -92,14 +110,15 @@
     const baseline = { conditioned: grade.conditioned, unconditioned: grade.unconditioned };
 
     const structuralMult1 = cfg.structuralMultipliers.stage1[s.program.structuralComplexity] || 1.0;
-    const totalSf = (s.program.conditionedSf || 0) + (s.program.unconditionedSf || 0);
+    const totals = sumScopes(s.program.scopes);
+    const totalSf = totals.conditionedSf + totals.unconditionedSf;
     const sizeMult = window.aeConfig.sizeCurveMultiplier(totalSf, cfg.sizeCurve);
 
-    const condDensity = s.program.conditionedSf > 0
-      ? (s.program.conditionedSpaces / s.program.conditionedSf) * 1000
+    const condDensity = totals.conditionedSf > 0
+      ? (totals.conditionedSpaces / totals.conditionedSf) * 1000
       : 0;
-    const uncondDensity = s.program.unconditionedSf > 0
-      ? (s.program.unconditionedSpaces / s.program.unconditionedSf) * 1000
+    const uncondDensity = totals.unconditionedSf > 0
+      ? (totals.unconditionedSpaces / totals.unconditionedSf) * 1000
       : 0;
 
     const condDensityMult = window.aeConfig.densityCurveMultiplier(condDensity, cfg.conditionedDensityCurve);
@@ -111,7 +130,7 @@
     const effCondRate   = s.stage1Overrides.conditionedRate   != null ? s.stage1Overrides.conditionedRate   : calcCondRate;
     const effUncondRate = s.stage1Overrides.unconditionedRate != null ? s.stage1Overrides.unconditionedRate : calcUncondRate;
 
-    const calcCost = (s.program.conditionedSf || 0) * effCondRate + (s.program.unconditionedSf || 0) * effUncondRate;
+    const calcCost = totals.conditionedSf * effCondRate + totals.unconditionedSf * effUncondRate;
     const effCost  = s.stage1Overrides.constructionCost != null ? s.stage1Overrides.constructionCost : calcCost;
 
     const stage1 = {
@@ -123,6 +142,7 @@
         unconditionedDensity: uncondDensityMult,
       },
       densities: { conditioned: condDensity, unconditioned: uncondDensity },
+      totals,
       calcCondRate, calcUncondRate,
       effCondRate, effUncondRate,
       calcCost, effCost,
@@ -391,26 +411,41 @@
   function renderProgramSection() {
     const p = state.program;
     const cfg = window.aeConfig.loadConfig();
+    const scopes = p.scopes || [];
+    const totals = sumScopes(scopes);
+    const canRemove = scopes.length > 1;
+
     return `
       <div class="form-section">
         <h3>Program</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="aeCondSf">Conditioned sf</label>
-            <input type="number" id="aeCondSf" min="0" step="50" value="${p.conditionedSf || 0}">
+        <div class="ae-scopes">
+          <div class="ae-scope-row ae-scope-header">
+            <span>Scope</span>
+            <span>Cond sf</span>
+            <span>Cond spaces</span>
+            <span>Uncond sf</span>
+            <span>Uncond spaces</span>
+            <span></span>
           </div>
-          <div class="form-group">
-            <label for="aeCondSpaces">Conditioned spaces</label>
-            <input type="number" id="aeCondSpaces" min="0" step="1" value="${p.conditionedSpaces || 0}">
+          ${scopes.map((sc) => `
+            <div class="ae-scope-row" data-scope-id="${sc.id}">
+              <input type="text"   class="ae-scope-name"  data-scope-id="${sc.id}" value="${escapeAttr(sc.name)}" placeholder="Scope name">
+              <input type="number" class="ae-scope-csf"   data-scope-id="${sc.id}" min="0" step="50" value="${sc.conditionedSf || 0}">
+              <input type="number" class="ae-scope-csp"   data-scope-id="${sc.id}" min="0" step="1"  value="${sc.conditionedSpaces || 0}">
+              <input type="number" class="ae-scope-usf"   data-scope-id="${sc.id}" min="0" step="50" value="${sc.unconditionedSf || 0}">
+              <input type="number" class="ae-scope-usp"   data-scope-id="${sc.id}" min="0" step="1"  value="${sc.unconditionedSpaces || 0}">
+              ${canRemove ? `<button class="ae-scope-remove" data-scope-id="${sc.id}" title="Remove scope">×</button>` : '<span></span>'}
+            </div>
+          `).join('')}
+          <div class="ae-scope-row ae-scope-totals">
+            <span>Total (${scopes.length} scope${scopes.length === 1 ? '' : 's'})</span>
+            <span>${totals.conditionedSf.toLocaleString()}</span>
+            <span>${totals.conditionedSpaces}</span>
+            <span>${totals.unconditionedSf.toLocaleString()}</span>
+            <span>${totals.unconditionedSpaces}</span>
+            <span></span>
           </div>
-          <div class="form-group">
-            <label for="aeUncondSf">Unconditioned sf</label>
-            <input type="number" id="aeUncondSf" min="0" step="50" value="${p.unconditionedSf || 0}">
-          </div>
-          <div class="form-group">
-            <label for="aeUncondSpaces">Unconditioned spaces</label>
-            <input type="number" id="aeUncondSpaces" min="0" step="1" value="${p.unconditionedSpaces || 0}">
-          </div>
+          <div class="ae-add-row"><button class="btn btn-small" id="aeAddScopeBtn">+ Add Scope</button></div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -440,7 +475,7 @@
             </select>
           </div>
         </div>
-        <p class="help-text"><strong>Conditioned spaces</strong>: count named rooms inside the thermal envelope. <strong>Unconditioned spaces</strong>: garages, porches, covered outdoor areas. <strong>Building Category</strong> and <strong>Project Complexity</strong> drive the AIA-style fee schedule lookup.</p>
+        <p class="help-text">Break the project into scopes (e.g., "Master suite remodel", "Garage to ADU"). Totals roll into the calculation; scope names are organizational only. <strong>Cond spaces</strong>: named rooms inside the thermal envelope. <strong>Uncond spaces</strong>: garages, porches, covered outdoor areas.</p>
       </div>
     `;
   }
@@ -496,7 +531,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="aeScheduleFactor">Fee Schedule Factor <span class="ae-calc-hint">multiplies whole table · dial down to back out MEP/consultants</span></label>
+            <label for="aeScheduleFactor">Fee Schedule Factor <span class="ae-calc-hint">multiplies the whole table for calibration</span></label>
             <input type="number" id="aeScheduleFactor" step="0.05" min="0" value="${(cfg.feeSchedule.factor != null ? cfg.feeSchedule.factor : 1).toString()}">
           </div>
         </div>
@@ -613,11 +648,33 @@
     attachText('aeClientName',   (v) => { state.identity.clientName = v; }, false);
     attachSelect('aeProjectType', (v) => { state.identity.projectType = v; render(); });
 
-    // Program
-    attachNumber('aeCondSf',       (v) => { state.program.conditionedSf = v; render(); });
-    attachNumber('aeCondSpaces',   (v) => { state.program.conditionedSpaces = v; render(); });
-    attachNumber('aeUncondSf',     (v) => { state.program.unconditionedSf = v; render(); });
-    attachNumber('aeUncondSpaces', (v) => { state.program.unconditionedSpaces = v; render(); });
+    // Program — scopes
+    document.querySelectorAll('.ae-scope-name').forEach((el) => {
+      el.addEventListener('change', () => {
+        const sc = findScope(el.dataset.scopeId);
+        if (sc) { sc.name = el.value; render(); }
+      });
+    });
+    document.querySelectorAll('.ae-scope-csf').forEach((el) => bindScopeNumber(el, 'conditionedSf'));
+    document.querySelectorAll('.ae-scope-csp').forEach((el) => bindScopeNumber(el, 'conditionedSpaces'));
+    document.querySelectorAll('.ae-scope-usf').forEach((el) => bindScopeNumber(el, 'unconditionedSf'));
+    document.querySelectorAll('.ae-scope-usp').forEach((el) => bindScopeNumber(el, 'unconditionedSpaces'));
+    document.querySelectorAll('.ae-scope-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.program.scopes.length <= 1) return;
+        state.program.scopes = state.program.scopes.filter((s) => s.id !== btn.dataset.scopeId);
+        render();
+      });
+    });
+    const addScopeBtn = document.getElementById('aeAddScopeBtn');
+    if (addScopeBtn) {
+      addScopeBtn.addEventListener('click', () => {
+        const n = state.program.scopes.length + 1;
+        state.program.scopes.push(makeScope('Scope ' + n, 0, 0, 0, 0));
+        render();
+      });
+    }
+
     attachSelect('aeBuildGrade',   (v) => { state.program.buildGrade = v; render(); });
     attachSelect('aeStructuralComplexity', (v) => { state.program.structuralComplexity = v; render(); });
     attachSelect('aeBuildingCategory', (v) => { state.program.buildingCategory = v; render(); });
@@ -778,6 +835,20 @@
     return (state.additionalServices || []).find((s) => s.id === id);
   }
 
+  function findScope(id) {
+    return (state.program.scopes || []).find((s) => s.id === id);
+  }
+
+  function bindScopeNumber(el, field) {
+    el.addEventListener('change', () => {
+      const sc = findScope(el.dataset.scopeId);
+      if (!sc) return;
+      const v = parseFloat(el.value);
+      sc[field] = isFinite(v) ? v : 0;
+      render();
+    });
+  }
+
   function attachText(id, onChange, liveUpdate) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -839,6 +910,21 @@
       });
       if (!Array.isArray(state.additionalServices)) state.additionalServices = [];
       if (!state.lineOverrides || typeof state.lineOverrides !== 'object') state.lineOverrides = {};
+      // Migrate older saves: flat sf/spaces fields → single Scope 1.
+      if (!Array.isArray(state.program.scopes) || state.program.scopes.length === 0) {
+        state.program.scopes = [makeScope(
+          'Scope 1',
+          state.program.conditionedSf || 0,
+          state.program.conditionedSpaces || 0,
+          state.program.unconditionedSf || 0,
+          state.program.unconditionedSpaces || 0
+        )];
+      }
+      // Drop legacy top-level fields so they can't drift out of sync.
+      delete state.program.conditionedSf;
+      delete state.program.conditionedSpaces;
+      delete state.program.unconditionedSf;
+      delete state.program.unconditionedSpaces;
       render();
     },
     reset: () => { state = makeInitialState(); render(); },
