@@ -548,3 +548,349 @@ main {
     gap: 0.75rem;
   }
 }
+
+/* ==========================================================
+   A/E Estimate styles
+   ========================================================== */
+
+.ae-form .form-section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #1e293b;
+}
+
+.ae-calc-hint {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+
+/* Stage 1 multiplier strip */
+.ae-multiplier-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ae-multiplier-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.ae-chip-label {
+  color: #64748b;
+}
+
+.ae-chip-value {
+  color: #1e293b;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-stage-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.ae-stage-summary-label {
+  font-size: 0.875rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.ae-stage-summary-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fee schedule breakdown strip */
+.ae-fee-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-fee-breakdown-final {
+  margin-left: auto;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 0.9375rem;
+}
+
+/* Regulatory flags */
+.ae-flags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.ae-flag-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.ae-flag-checkbox input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Output area */
+.ae-output {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ae-grand-total {
+  display: flex;
+  justify-content: space-around;
+  padding: 1rem;
+  background: #1e293b;
+  color: #fff;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.ae-grand-total-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ae-gt-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ae-gt-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sections */
+.ae-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.ae-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  user-select: none;
+}
+
+.ae-section-header:hover {
+  background: #f1f5f9;
+}
+
+.ae-section-caret {
+  width: 14px;
+  color: #64748b;
+}
+
+.ae-section-label {
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+}
+
+.ae-section-totals {
+  display: flex;
+  gap: 0.5rem;
+  color: #475569;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-section-totals span:nth-child(odd) {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.ae-section.collapsed .ae-section-body {
+  display: none;
+}
+
+.ae-section-body {
+  padding: 0.5rem 0.875rem;
+}
+
+/* Line rows */
+.ae-line-row {
+  display: grid;
+  grid-template-columns: 2fr 0.9fr 0.8fr 1fr 1.2fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.375rem 0;
+  font-size: 0.875rem;
+}
+
+.ae-line-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.ae-line-row.is-overridden {
+  background: #fffbeb;
+  border-radius: 4px;
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+}
+
+.ae-line-label {
+  color: #1e293b;
+}
+
+.ae-line-rate,
+.ae-line-hours,
+.ae-line-dollars {
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-rate-display {
+  color: #64748b;
+  font-size: 0.8125rem;
+}
+
+.ae-line-input,
+.ae-user-label,
+.ae-user-rate {
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-line-input:focus,
+.ae-user-label:focus,
+.ae-user-rate:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.ae-line-input.overridden {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  font-weight: 600;
+}
+
+.ae-line-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ae-ghost-calc {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+
+.ae-override-badge {
+  display: inline-block;
+  padding: 0.0625rem 0.375rem;
+  margin-left: 0.25rem;
+  background: #fde68a;
+  color: #92400e;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.ae-line-reset,
+.ae-line-remove {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+}
+
+.ae-line-reset:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.ae-line-remove:hover {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.ae-add-row {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  .ae-line-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 0.25rem;
+  }
+  .ae-line-header { display: none; }
+  .ae-section-totals {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .ae-grand-total {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
