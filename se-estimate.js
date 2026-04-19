@@ -458,8 +458,88 @@
     });
 
     document.getElementById('btnImport').addEventListener('click', () => {
-      window.importProject();
+      importProject();
     });
+  }
+
+  // ---------- Export / Import (per-tool, v3 envelope) ----------
+
+  async function exportProject() {
+    const name = state.projectName || 'Untitled Project';
+    const safeName = name.replace(/[^a-zA-Z0-9 _\-]/g, '');
+    const wrapper = {
+      version: 3,
+      tool: 'se',
+      name,
+      date: new Date().toISOString(),
+      state,
+    };
+    const json = JSON.stringify(wrapper, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: safeName + ' - SE Estimate.json',
+          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeName + ' - SE Estimate.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importProject() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const wrapper = JSON.parse(reader.result);
+          let imported;
+          if (wrapper && wrapper.version === 3) {
+            if (wrapper.tool && wrapper.tool !== 'se') {
+              alert('This is an A/E estimate file. Open it on the A/E page.');
+              return;
+            }
+            imported = wrapper.state;
+          } else if (wrapper && wrapper.version === 2) {
+            imported = wrapper.seState;
+            if (!imported) { alert('No SE estimate found in this file.'); return; }
+          } else {
+            imported = (wrapper && wrapper.state) || wrapper;
+          }
+          if (!imported || typeof imported.stories !== 'number') {
+            alert('This file does not appear to be a valid SE estimate.');
+            return;
+          }
+          state = imported;
+          initCornerOutlines();
+          rebuildForm();
+        } catch (e) {
+          alert('Could not read file: ' + e.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
   }
 
   function readFormIntoState() {
@@ -781,7 +861,7 @@
     });
 
     document.getElementById('btnExport').addEventListener('click', () => {
-      window.exportProject();
+      exportProject();
     });
 
     document.getElementById('btnHoursUp').addEventListener('click', () => {
@@ -967,7 +1047,7 @@
     if (document.getElementById('projectName')) readFormIntoState();
   }
 
-  // Expose public API
+  // Expose public API (kept for diagnostics; page initializes itself below).
   window.seEstimate = {
     render,
     saveForm,
@@ -983,4 +1063,7 @@
       rebuildForm();
     },
   };
+
+  // Initial render — runs as the page loads.
+  render();
 })();

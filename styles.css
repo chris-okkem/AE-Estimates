@@ -23,12 +23,22 @@ header h1 {
   margin-bottom: 1rem;
 }
 
+.header-home {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header-home:hover {
+  opacity: 0.85;
+}
+
 #estimate-nav {
   display: flex;
   gap: 0.25rem;
 }
 
 .nav-btn {
+  display: inline-block;
   padding: 0.5rem 1.25rem;
   background: transparent;
   color: #94a3b8;
@@ -37,6 +47,7 @@ header h1 {
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
+  text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -54,6 +65,65 @@ main {
   max-width: 900px;
   margin: 2rem auto;
   padding: 0 1.5rem;
+}
+
+/* Landing page */
+.landing {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+}
+
+.landing-intro {
+  font-size: 1rem;
+  color: #475569;
+  margin-bottom: 1.5rem;
+}
+
+.landing-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.landing-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.landing-tile:hover {
+  border-color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+.landing-tile h2 {
+  font-size: 1.125rem;
+  margin: 0;
+  color: #1e293b;
+}
+
+.landing-tile p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.landing-tile-cta {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 /* Form layout */

@@ -863,14 +863,93 @@
     });
 
     // Top-level buttons
-    document.getElementById('aeBtnExport').addEventListener('click', () => { window.exportProject(); });
-    document.getElementById('aeBtnImport').addEventListener('click', () => { window.importProject(); });
+    document.getElementById('aeBtnExport').addEventListener('click', () => { exportProject(); });
+    document.getElementById('aeBtnImport').addEventListener('click', () => { importProject(); });
     document.getElementById('aeBtnReset').addEventListener('click', () => {
       if (confirm('Reset this A/E estimate? Settings are not affected.')) {
         state = makeInitialState();
         render();
       }
     });
+  }
+
+  // ---------- Export / Import (per-tool, v3 envelope) ----------
+
+  async function exportProject() {
+    const name = state.identity.projectName || 'Untitled Project';
+    const safeName = name.replace(/[^a-zA-Z0-9 _\-]/g, '');
+    const wrapper = {
+      version: 3,
+      tool: 'ae',
+      name,
+      date: new Date().toISOString(),
+      state,
+    };
+    const json = JSON.stringify(wrapper, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: safeName + ' - AE Estimate.json',
+          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeName + ' - AE Estimate.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importProject() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const wrapper = JSON.parse(reader.result);
+          let imported;
+          if (wrapper && wrapper.version === 3) {
+            if (wrapper.tool && wrapper.tool !== 'ae') {
+              alert('This is an SE estimate file. Open it on the SE Estimate page.');
+              return;
+            }
+            imported = wrapper.state;
+          } else if (wrapper && wrapper.version === 2) {
+            imported = wrapper.aeState;
+            if (!imported) { alert('No A/E estimate found in this file.'); return; }
+          } else {
+            alert('This file does not appear to be a valid A/E estimate.');
+            return;
+          }
+          if (!imported || typeof imported !== 'object') {
+            alert('This file does not appear to be a valid A/E estimate.');
+            return;
+          }
+          window.aeEstimate.setState(imported);
+        } catch (e) {
+          alert('Could not read file: ' + e.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
   }
 
   function findSvc(id) {
@@ -976,4 +1055,7 @@
     // Exposed for tests / debugging:
     _calculate: calculate,
   };
+
+  // Initial render — runs as the page loads.
+  render();
 })();

@@ -8,20 +8,29 @@
 </head>
 <body>
   <header>
-    <h1>AE Estimates</h1>
+    <h1><a class="header-home" href="index.html">AE Estimates</a></h1>
     <nav id="estimate-nav">
-      <button class="nav-btn active" data-type="se">SE Estimate</button>
-      <button class="nav-btn" data-type="ae">A/E Estimate</button>
+      <a class="nav-btn" href="se.html">SE Estimate</a>
+      <a class="nav-btn" href="ae.html">A/E Estimate</a>
     </nav>
   </header>
 
   <main id="app">
-    <!-- Estimate forms render here -->
+    <div class="landing">
+      <p class="landing-intro">Pre-contract estimating tools for residential structural engineering and full-scope architecture + engineering work.</p>
+      <div class="landing-tiles">
+        <a class="landing-tile" href="se.html">
+          <h2>SE Estimate</h2>
+          <p>Residential structural engineering hours and fee, calculated from plan geometry and complexity modifiers.</p>
+          <span class="landing-tile-cta">Open SE Estimate →</span>
+        </a>
+        <a class="landing-tile" href="ae.html">
+          <h2>A/E Estimate</h2>
+          <p>Architecture + engineering full-scope fee, broken down by phase and line item, with editable calibration settings.</p>
+          <span class="landing-tile-cta">Open A/E Estimate →</span>
+        </a>
+      </div>
+    </div>
   </main>
-
-  <script src="se-estimate.js"></script>
-  <script src="ae-config.js"></script>
-  <script src="ae-estimate.js"></script>
-  <script src="app.js"></script>
 </body>
 </html>
