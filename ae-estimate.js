@@ -160,10 +160,21 @@
     const pw = cfg.phaseWeights;
     const feasibilityConceptDollars = architectShare * pw.feasibilityConcept;
     const schematicDollars          = architectShare * pw.schematicDesign;
-    const designDevelopmentDollars  = architectShare * pw.designDevelopment;
+    const designDevelopmentBase     = architectShare * pw.designDevelopment;
     const cdTotalDollars            = architectShare * pw.constructionDocuments;
     const biddingDollars            = architectShare * pw.biddingNegotiation;
     const designCaDollars           = architectShare * pw.constructionAdministration;
+
+    // Design Development scales with which CD sub-levels are included.
+    // Excluding Construction Set / Bid Set / Permit Set zeroes out their share
+    // of the DD baseline (overrides on DD still win as usual).
+    const exc = s.lineExclusions || {};
+    const ddSplit = cfg.designDevelopmentCdSplit || { permitSet: 0.25, bidSet: 0.25, constructionSet: 0.50 };
+    const ddWeight =
+        (exc['permit_set']       ? 0 : (ddSplit.permitSet       || 0))
+      + (exc['bid_set']          ? 0 : (ddSplit.bidSet          || 0))
+      + (exc['construction_set'] ? 0 : (ddSplit.constructionSet || 0));
+    const designDevelopmentDollars = designDevelopmentBase * ddWeight;
 
     // CD sub-level dollar splits — all three compute their full value.
     // Exclusion is now per-line via state.lineExclusions.

@@ -106,6 +106,14 @@ window.aeConfig = (function () {
       bidSet: 0.33,
       constructionSet: 0.45,
     },
+    // How much of Design Development each CD sub-level "anchors". When a CD
+    // sub-level is excluded, that fraction of DD drops out of the calculated
+    // DD baseline. Sums to 1.0.
+    designDevelopmentCdSplit: {
+      permitSet: 0.25,
+      bidSet: 0.25,
+      constructionSet: 0.50,
+    },
     cityCommentsBasePct: 0.05,
     regulatoryFlags: [
       { id: 'subchapter_f',        label: 'Subchapter F (McMansion)',   permitSetAdder: 0.15, cityCommentsAdder: 0.40 },
