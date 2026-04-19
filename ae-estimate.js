@@ -38,8 +38,6 @@
     { id: 'additional-services',    label: 'Additional Services',         lineIds: [] },
   ];
 
-  const CD_LEVEL_ORDER = { permit_set: 1, bid_set: 2, construction_set: 3 };
-
   // ---------- State ----------
 
   let state = makeInitialState();
@@ -87,7 +85,6 @@
       },
       stage2: {
         activeFlags: [],
-        cdLevel: 'construction_set',
       },
       manualHours: {
         feasibility: 0,
@@ -99,6 +96,7 @@
       },
       additionalServices: [],
       lineOverrides: {},
+      lineExclusions: {},
     };
   }
 
@@ -167,13 +165,11 @@
     const biddingDollars            = architectShare * pw.biddingNegotiation;
     const designCaDollars           = architectShare * pw.constructionAdministration;
 
-    // CD sub-levels with gating
-    const selectedCdOrder = CD_LEVEL_ORDER[s.stage2.cdLevel] || 3;
-    let permitSetDollars      = cdTotalDollars * cfg.cdSubLevelSplit.permitSet;
-    let bidSetDollars         = cdTotalDollars * cfg.cdSubLevelSplit.bidSet;
-    let constructionSetDollars = cdTotalDollars * cfg.cdSubLevelSplit.constructionSet;
-    if (selectedCdOrder < CD_LEVEL_ORDER.bid_set)          bidSetDollars = 0;
-    if (selectedCdOrder < CD_LEVEL_ORDER.construction_set) constructionSetDollars = 0;
+    // CD sub-level dollar splits — all three compute their full value.
+    // Exclusion is now per-line via state.lineExclusions.
+    let permitSetDollars       = cdTotalDollars * cfg.cdSubLevelSplit.permitSet;
+    const bidSetDollars        = cdTotalDollars * cfg.cdSubLevelSplit.bidSet;
+    const constructionSetDollars = cdTotalDollars * cfg.cdSubLevelSplit.constructionSet;
 
     // Permit set regulatory uplift
     const activeFlags = cfg.regulatoryFlags.filter((f) => (s.stage2.activeFlags || []).includes(f.id));
@@ -260,6 +256,7 @@
           effDollars = calcDollars;
         }
 
+        const excluded = !!(s.lineExclusions || {})[lineId];
         lines.push({
           id: lineId,
           label: LINE_LABELS[lineId] || lineId,
@@ -270,6 +267,7 @@
           isCalculated: !isManual,
           overriddenField,
           isOverridden: overriddenField !== null,
+          excluded,
         });
       });
 
@@ -279,6 +277,7 @@
           const rate = item.rate || 0;
           const hours = item.hours || 0;
           const dollars = item.dollars != null ? item.dollars : hours * rate;
+          const excluded = !!(s.lineExclusions || {})[item.id];
           lines.push({
             id: item.id,
             label: item.label || '',
@@ -292,12 +291,13 @@
             isUser: true,
             overriddenField: null,
             isOverridden: false,
+            excluded,
           });
         });
       }
 
-      const totalHours = lines.reduce((sum, l) => sum + (l.effHours || 0), 0);
-      const totalDollars = lines.reduce((sum, l) => sum + (l.effDollars || 0), 0);
+      const totalHours = lines.reduce((sum, l) => sum + (l.excluded ? 0 : (l.effHours || 0)), 0);
+      const totalDollars = lines.reduce((sum, l) => sum + (l.excluded ? 0 : (l.effDollars || 0)), 0);
       const blendedRate = totalHours > 0 ? totalDollars / totalHours : 0;
 
       return {
@@ -451,13 +451,20 @@
           <div class="form-group">
             <label for="aeBuildGrade">Build Grade</label>
             <select id="aeBuildGrade">
-              ${Object.keys(cfg.buildGrades).map((g) => `<option value="${g}" ${p.buildGrade === g ? 'selected' : ''}>${cfg.buildGradeLabels[g] || g}</option>`).join('')}
+              ${Object.keys(cfg.buildGrades).map((g) => {
+                const r = cfg.buildGrades[g];
+                return `<option value="${g}" ${p.buildGrade === g ? 'selected' : ''}>${cfg.buildGradeLabels[g] || g} ($${r.conditioned}/$${r.unconditioned} per sf)</option>`;
+              }).join('')}
             </select>
           </div>
           <div class="form-group">
             <label for="aeStructuralComplexity">Structural Complexity</label>
             <select id="aeStructuralComplexity">
-              ${['low', 'medium', 'high'].map((c) => `<option value="${c}" ${p.structuralComplexity === c ? 'selected' : ''}>${cfg.structuralComplexityLabels[c] || c}</option>`).join('')}
+              ${['low', 'medium', 'high'].map((c) => {
+                const m1 = (cfg.structuralMultipliers.stage1 || {})[c];
+                const m2 = (cfg.structuralMultipliers.stage2 || {})[c];
+                return `<option value="${c}" ${p.structuralComplexity === c ? 'selected' : ''}>${cfg.structuralComplexityLabels[c] || c} (cost ×${m1.toFixed(2)} · fee ×${m2.toFixed(2)})</option>`;
+              }).join('')}
             </select>
           </div>
         </div>
@@ -506,9 +513,15 @@
             <input type="number" id="aeCostOverride" step="1000" value="${ov.constructionCost != null ? ov.constructionCost : ''}" placeholder="${Math.round(s1.calcCost)}">
           </div>
         </div>
-        <div class="ae-stage-summary">
-          <span class="ae-stage-summary-label">Effective Construction Cost</span>
-          <span class="ae-stage-summary-value">${fmtMoney(s1.effCost)}</span>
+        <div class="ae-calc-strip">
+          <div class="ae-calc-formula">
+            ${s1.totals.conditionedSf.toLocaleString()} cond sf × $${(s1.effCondRate).toFixed(2)}/sf
+            + ${s1.totals.unconditionedSf.toLocaleString()} uncond sf × $${(s1.effUncondRate).toFixed(2)}/sf
+          </div>
+          <div class="ae-calc-result">
+            <span class="ae-calc-label">Construction Cost</span>
+            <span class="ae-calc-value">${fmtMoney(s1.effCost)}</span>
+          </div>
         </div>
       </div>
     `;
@@ -516,20 +529,11 @@
 
   function renderStage2Section(cfg, result) {
     const sch = result.stage2.schedule;
+    const s2 = result.stage2;
     return `
       <div class="form-section">
         <h3>Stage 2 · Scope &amp; Regulatory</h3>
         <div class="form-row">
-          <div class="form-group">
-            <label for="aeCdLevel">CD Level</label>
-            <select id="aeCdLevel">
-              ${[
-                { v: 'permit_set', l: 'Permit Set' },
-                { v: 'bid_set', l: 'Bid Set' },
-                { v: 'construction_set', l: 'Construction Set' },
-              ].map((o) => `<option value="${o.v}" ${state.stage2.cdLevel === o.v ? 'selected' : ''}>${o.l}</option>`).join('')}
-            </select>
-          </div>
           <div class="form-group">
             <label for="aeScheduleFactor">Fee Schedule Factor <span class="ae-calc-hint">multiplies the whole table for calibration</span></label>
             <input type="number" id="aeScheduleFactor" step="0.05" min="0" value="${(cfg.feeSchedule.factor != null ? cfg.feeSchedule.factor : 1).toString()}">
@@ -540,7 +544,17 @@
           <span>base ${(sch.basePct * 100).toFixed(2)}%</span>
           <span>× complexity ${sch.complexityFactor.toFixed(2)}</span>
           <span>× factor ${sch.scheduleFactor.toFixed(2)}</span>
-          <span class="ae-fee-breakdown-final">= ${(result.stage2.feePct * 100).toFixed(2)}%</span>
+          <span class="ae-fee-breakdown-final">= ${(s2.feePct * 100).toFixed(2)}%</span>
+        </div>
+        <div class="ae-calc-strip">
+          <div class="ae-calc-formula">
+            ${fmtMoney(result.stage1.effCost)} × ${(s2.feePct * 100).toFixed(2)}% = ${fmtMoney(s2.totalFeeBase)}
+            &nbsp;·&nbsp; structural carve-out −${fmtMoney(s2.totalStructuralFee)}
+          </div>
+          <div class="ae-calc-result">
+            <span class="ae-calc-label">Base Architect Fee</span>
+            <span class="ae-calc-value">${fmtMoney(s2.architectShare)}</span>
+          </div>
         </div>
         <div class="ae-flags-grid">
           ${cfg.regulatoryFlags.map((f) => {
@@ -556,15 +570,16 @@
   }
 
   function renderOutput(result) {
-    const { sections, grandTotal, stage2 } = result;
+    const { sections, grandTotal, stage1 } = result;
+    const actualFeePct = stage1.effCost > 0 ? grandTotal.dollars / stage1.effCost : 0;
     return `
       <div class="ae-output">
+        ${sections.map((sect) => renderSection(sect)).join('')}
         <div class="ae-grand-total">
           <div class="ae-grand-total-item"><span class="ae-gt-label">Total Hours</span><span class="ae-gt-value">${fmtHours(grandTotal.hours)}</span></div>
           <div class="ae-grand-total-item"><span class="ae-gt-label">Total Fee</span><span class="ae-gt-value">${fmtMoney(grandTotal.dollars)}</span></div>
-          <div class="ae-grand-total-item"><span class="ae-gt-label">Fee %</span><span class="ae-gt-value">${fmtPct(stage2.feePct)}</span></div>
+          <div class="ae-grand-total-item"><span class="ae-gt-label">Effective Fee %</span><span class="ae-gt-value">${fmtPct(actualFeePct)}</span></div>
         </div>
-        ${sections.map((sect) => renderSection(sect)).join('')}
       </div>
     `;
   }
@@ -589,6 +604,7 @@
         </div>
         <div class="ae-section-body">
           <div class="ae-line-row ae-line-header">
+            <span class="ae-line-include" title="Include">✓</span>
             <span class="ae-line-label">Line</span>
             <span class="ae-line-rate">Rate</span>
             <span class="ae-line-hours">Hours</span>
@@ -606,6 +622,9 @@
     const overrideBadge = l.isOverridden
       ? `<span class="ae-override-badge" title="Overridden ${l.overriddenField}">edited</span>`
       : '';
+    const excludedBadge = l.excluded
+      ? `<span class="ae-excluded-badge" title="Not included in totals">not included</span>`
+      : '';
     const ghostCalc = l.isOverridden
       ? `<span class="ae-ghost-calc" title="Calculated value">(${fmtHours(l.calcHours)}h · ${fmtMoney(l.calcDollars)})</span>`
       : '';
@@ -614,7 +633,8 @@
       : '';
     const labelCell = l.isUser
       ? `<input type="text" class="ae-user-label" data-svc-id="${l.id}" value="${escapeAttr(l.label)}" placeholder="Service description">`
-      : `<span>${escapeHtml(l.label)} ${overrideBadge}</span>`;
+      : `<span>${escapeHtml(l.label)} ${overrideBadge} ${excludedBadge}</span>`;
+    const userBadge = l.isUser ? excludedBadge : '';
     const rateCell = l.isUser
       ? `<input type="number" class="ae-user-rate" data-svc-id="${l.id}" min="0" step="1" value="${l.rate || 0}">`
       : `<span class="ae-rate-display">${fmtRate(l.rate)}</span>`;
@@ -629,9 +649,12 @@
       ? `<input type="number" class="ae-line-input ae-user-dollars" data-svc-id="${l.id}" min="0" step="1" value="${Math.round(l.effDollars)}">`
       : `<input type="number" class="ae-line-input ae-line-dollars-input ${l.isOverridden && l.overriddenField === 'dollars' ? 'overridden' : ''}" data-line-id="${l.id}" min="0" step="1" value="${Math.round(l.effDollars)}">`;
 
+    const includeToggle = `<input type="checkbox" class="ae-include-checkbox" data-line-id="${l.id}" ${!l.excluded ? 'checked' : ''} title="Include in totals">`;
+
     return `
-      <div class="ae-line-row ${l.isOverridden ? 'is-overridden' : ''}">
-        <span class="ae-line-label">${labelCell}</span>
+      <div class="ae-line-row ${l.isOverridden ? 'is-overridden' : ''} ${l.excluded ? 'is-excluded' : ''}">
+        <span class="ae-line-include">${includeToggle}</span>
+        <span class="ae-line-label">${labelCell}${l.isUser ? ' ' + userBadge : ''}</span>
         <span class="ae-line-rate">${rateCell}</span>
         <span class="ae-line-hours">${hoursCell}</span>
         <span class="ae-line-dollars">${dollarsCell}</span>
@@ -686,7 +709,15 @@
     attachNumberOrClear('aeCostOverride',       (v) => { state.stage1Overrides.constructionCost = v; render(); });
 
     // Stage 2
-    attachSelect('aeCdLevel', (v) => { state.stage2.cdLevel = v; render(); });
+    // Per-line include/exclude toggles
+    document.querySelectorAll('.ae-include-checkbox').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.lineId;
+        if (cb.checked) delete state.lineExclusions[id];
+        else state.lineExclusions[id] = true;
+        render();
+      });
+    });
 
     // Fee schedule factor lives in config; edits persist to localStorage.
     const factorEl = document.getElementById('aeScheduleFactor');
@@ -910,6 +941,9 @@
       });
       if (!Array.isArray(state.additionalServices)) state.additionalServices = [];
       if (!state.lineOverrides || typeof state.lineOverrides !== 'object') state.lineOverrides = {};
+      if (!state.lineExclusions || typeof state.lineExclusions !== 'object') state.lineExclusions = {};
+      // Drop legacy CD Level field (replaced by per-line include/exclude).
+      delete state.stage2.cdLevel;
       // Migrate older saves: flat sf/spaces fields → single Scope 1.
       if (!Array.isArray(state.program.scopes) || state.program.scopes.length === 0) {
         state.program.scopes = [makeScope(

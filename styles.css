@@ -697,6 +697,40 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+/* Calculation strip — used for construction cost and base architect fee */
+.ae-calc-strip {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ae-calc-formula {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-bottom: 0.375rem;
+}
+
+.ae-calc-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ae-calc-label {
+  font-size: 0.875rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.ae-calc-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
 /* Fee schedule breakdown strip */
 .ae-fee-breakdown {
   display: flex;
@@ -758,7 +792,7 @@ main {
   background: #1e293b;
   color: #fff;
   border-radius: 8px;
-  margin-bottom: 1rem;
+  margin-top: 1rem;
 }
 
 .ae-grand-total-item {
@@ -838,11 +872,48 @@ main {
 /* Line rows */
 .ae-line-row {
   display: grid;
-  grid-template-columns: 2fr 0.9fr 0.8fr 1fr 1.2fr;
+  grid-template-columns: 28px 2fr 0.9fr 0.8fr 1fr 1.2fr;
   gap: 0.5rem;
   align-items: center;
   padding: 0.375rem 0;
   font-size: 0.875rem;
+}
+
+.ae-line-include {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ae-line-include input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.ae-line-row.is-excluded {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+}
+
+.ae-line-row.is-excluded .ae-line-input,
+.ae-line-row.is-excluded .ae-rate-display {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.ae-excluded-badge {
+  display: inline-block;
+  padding: 0.0625rem 0.375rem;
+  margin-left: 0.25rem;
+  background: #e2e8f0;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-decoration: none;
 }
 
 .ae-line-header {
@@ -957,7 +1028,7 @@ main {
 
 @media (max-width: 640px) {
   .ae-line-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 28px 1fr 1fr;
     row-gap: 0.25rem;
   }
   .ae-line-header { display: none; }
