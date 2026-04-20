@@ -6,7 +6,6 @@
   // ---------- Line/section definitions ----------
 
   const LINE_LABELS = {
-    feasibility: 'Feasibility',
     site_visit: 'Site Visit',
     scan: '3D Scan',
     base_model: 'Base Model',
@@ -26,11 +25,11 @@
   };
 
   const MANUAL_LINES = new Set([
-    'feasibility', 'site_visit', 'scan', 'base_model', 'as_builts', 'permit_submittals',
+    'site_visit', 'scan', 'base_model', 'as_builts', 'permit_submittals',
   ]);
 
   const SECTIONS = [
-    { id: 'pre-design',             label: 'Pre-Design',                  lineIds: ['feasibility', 'site_visit', 'scan', 'base_model', 'as_builts', 'feasibility_concept'] },
+    { id: 'pre-design',             label: 'Pre-Design',                  lineIds: ['site_visit', 'scan', 'base_model', 'as_builts', 'feasibility_concept'] },
     { id: 'design',                 label: 'Design',                      lineIds: ['schematic_design', 'design_development'] },
     { id: 'cd',                     label: 'Construction Documents',      lineIds: ['permit_set', 'bid_set', 'construction_set'] },
     { id: 'structural-engineering', label: 'Structural Engineering',      lineIds: ['structural_engineering'] },
@@ -64,6 +63,44 @@
     }, { conditionedSf: 0, conditionedSpaces: 0, unconditionedSf: 0, unconditionedSpaces: 0 });
   }
 
+  // Default-able program inputs that participate in "Save as Default".
+  // Per-project fields (identity, manualHours, line overrides, etc.) are NOT
+  // part of this snapshot.
+  function shippedProgramDefaults() {
+    return {
+      scopes: [makeScope('Scope 1', 3000, 18, 500, 2)],
+      buildGrade: 'mid_custom',
+      structuralComplexity: 'medium',
+      buildingCategory: '7',
+      projectComplexity: 'simple',
+      regionalMultiplier: 1.15,
+    };
+  }
+
+  // Returns the user's saved program defaults, falling back to shipped values
+  // for any missing fields. Always returns a fresh, deep-cloned object.
+  function loadEffectiveProgramDefaults() {
+    const stored = window.aeConfig.loadProgramDefaults();
+    const shipped = shippedProgramDefaults();
+    const merged = stored ? Object.assign(shipped, stored) : shipped;
+    if (!Array.isArray(merged.scopes) || merged.scopes.length === 0) {
+      merged.scopes = shippedProgramDefaults().scopes;
+    }
+    return window.aeConfig.deepClone(merged);
+  }
+
+  // Pull the default-able subset out of state.program.
+  function extractProgramDefaults(program) {
+    return {
+      scopes: window.aeConfig.deepClone(program.scopes || []),
+      buildGrade: program.buildGrade,
+      structuralComplexity: program.structuralComplexity,
+      buildingCategory: program.buildingCategory,
+      projectComplexity: program.projectComplexity,
+      regionalMultiplier: program.regionalMultiplier,
+    };
+  }
+
   function makeInitialState() {
     return {
       identity: {
@@ -71,13 +108,7 @@
         clientName: '',
         projectType: 'new',
       },
-      program: {
-        scopes: [makeScope('Scope 1', 3000, 12, 600, 1)],
-        buildGrade: 'mid_custom',
-        structuralComplexity: 'medium',
-        buildingCategory: '7',
-        projectComplexity: 'normal',
-      },
+      program: loadEffectiveProgramDefaults(),
       stage1Overrides: {
         conditionedRate: null,
         unconditionedRate: null,
@@ -87,7 +118,6 @@
         activeFlags: [],
       },
       manualHours: {
-        feasibility: 0,
         site_visit: 0,
         scan: 0,
         base_model: 0,
@@ -97,14 +127,44 @@
       additionalServices: [],
       lineOverrides: {},
       lineExclusions: {},
+      config: null, // populated lazily from aeConfig.loadConfig(); preserved across reset()
     };
+  }
+
+  function ensureConfig() {
+    if (!state.config) {
+      state.config = window.aeConfig.loadConfig();
+    }
+    normalizeConfig(state.config);
+    return state.config;
+  }
+
+  function normalizeConfig(cfg) {
+    if (typeof cfg.builderBaseConditionedSf !== 'number' || cfg.builderBaseConditionedSf <= 0) {
+      cfg.builderBaseConditionedSf = 140;
+    }
+    // Drop legacy per-grade tables — derived now.
+    delete cfg.buildGrades;
+    delete cfg.buildGradeLabels;
+    // Drop legacy "feasibility" line — superseded by feasibility_concept.
+    if (cfg.hourlyRates) delete cfg.hourlyRates.feasibility;
+    // Permit set base factor (was implicit 1.0).
+    if (typeof cfg.permitSetBaseFactor !== 'number') cfg.permitSetBaseFactor = 0.8;
+    // City comments now reads as % of permit set, not % of architect share.
+    if (typeof cfg.cityCommentsPctOfPermitSet !== 'number') cfg.cityCommentsPctOfPermitSet = 0.25;
+    delete cfg.cityCommentsBasePct;
+    // Drop legacy city comments adder from each flag.
+    if (Array.isArray(cfg.regulatoryFlags)) {
+      cfg.regulatoryFlags.forEach((f) => { delete f.cityCommentsAdder; });
+    }
   }
 
   // ---------- Calculation (pure) ----------
 
   function calculate(s, cfg) {
     // Stage 1
-    const grade = cfg.buildGrades[s.program.buildGrade] || cfg.buildGrades.mid_custom;
+    const grades = window.aeConfig.deriveBuildGrades(cfg.builderBaseConditionedSf);
+    const grade = grades[s.program.buildGrade] || grades.mid_custom;
     const baseline = { conditioned: grade.conditioned, unconditioned: grade.unconditioned };
 
     const structuralMult1 = cfg.structuralMultipliers.stage1[s.program.structuralComplexity] || 1.0;
@@ -122,8 +182,10 @@
     const condDensityMult = window.aeConfig.densityCurveMultiplier(condDensity, cfg.conditionedDensityCurve);
     const uncondDensityMult = window.aeConfig.densityCurveMultiplier(uncondDensity, cfg.unconditionedDensityCurve);
 
-    const calcCondRate   = baseline.conditioned   * structuralMult1 * sizeMult * condDensityMult;
-    const calcUncondRate = baseline.unconditioned * structuralMult1 * sizeMult * uncondDensityMult;
+    const regionalMult = (s.program.regionalMultiplier > 0) ? s.program.regionalMultiplier : 1.0;
+
+    const calcCondRate   = baseline.conditioned   * structuralMult1 * sizeMult * condDensityMult   * regionalMult;
+    const calcUncondRate = baseline.unconditioned * structuralMult1 * sizeMult * uncondDensityMult * regionalMult;
 
     const effCondRate   = s.stage1Overrides.conditionedRate   != null ? s.stage1Overrides.conditionedRate   : calcCondRate;
     const effUncondRate = s.stage1Overrides.unconditionedRate != null ? s.stage1Overrides.unconditionedRate : calcUncondRate;
@@ -138,6 +200,7 @@
         size: sizeMult,
         conditionedDensity: condDensityMult,
         unconditionedDensity: uncondDensityMult,
+        regional: regionalMult,
       },
       densities: { conditioned: condDensity, unconditioned: uncondDensity },
       totals,
@@ -155,7 +218,10 @@
     const structuralEngineeringDollars = totalStructuralFee * cfg.structuralSettings.designPortion;
     const structuralCaDollars          = totalStructuralFee * cfg.structuralSettings.caPortion;
 
-    const architectShare = Math.max(totalFeeBase - totalStructuralFee, 0);
+    // The fee schedule is architect-only; the table value IS the architect's
+    // base fee. Structural is a separate scope that sits in its own section
+    // and adds to the grand total — not subtracted here.
+    const architectShare = totalFeeBase;
 
     const pw = cfg.phaseWeights;
     const feasibilityConceptDollars = architectShare * pw.feasibilityConcept;
@@ -176,22 +242,35 @@
       + (exc['construction_set'] ? 0 : (ddSplit.constructionSet || 0));
     const designDevelopmentDollars = designDevelopmentBase * ddWeight;
 
+    // Construction Administration scales with which CD sub-levels are
+    // included. Default split (0 / 0.5 / 0.5): excluding Construction Set
+    // halves CA; also excluding Bid Set zeros CA. Applies to both Design CA
+    // and Structural CA.
+    const caSplit = cfg.constructionAdministrationCdSplit || { permitSet: 0.0, bidSet: 0.5, constructionSet: 0.5 };
+    const caWeight =
+        (exc['permit_set']       ? 0 : (caSplit.permitSet       || 0))
+      + (exc['bid_set']          ? 0 : (caSplit.bidSet          || 0))
+      + (exc['construction_set'] ? 0 : (caSplit.constructionSet || 0));
+    const designCaDollarsAdjusted    = designCaDollars         * caWeight;
+    const structuralCaDollarsAdjusted = structuralCaDollars    * caWeight;
+
     // CD sub-level dollar splits — all three compute their full value.
     // Exclusion is now per-line via state.lineExclusions.
     let permitSetDollars       = cdTotalDollars * cfg.cdSubLevelSplit.permitSet;
     const bidSetDollars        = cdTotalDollars * cfg.cdSubLevelSplit.bidSet;
     const constructionSetDollars = cdTotalDollars * cfg.cdSubLevelSplit.constructionSet;
 
-    // Permit set regulatory uplift
+    // Permit set sizing: base factor (default 0.8) plus sum of active flag adders.
+    // No flags → 0.8× the CD-split allocation. Each active flag adds work on top.
     const activeFlags = cfg.regulatoryFlags.filter((f) => (s.stage2.activeFlags || []).includes(f.id));
-    const permitSetUpliftSum = activeFlags.reduce((sum, f) => sum + (f.permitSetAdder || 0), 0);
-    const permitSetUpliftFactor = 1 + permitSetUpliftSum;
+    const permitSetAdderSum = activeFlags.reduce((sum, f) => sum + (f.permitSetAdder || 0), 0);
+    const permitSetBaseFactor = (cfg.permitSetBaseFactor != null) ? cfg.permitSetBaseFactor : 0.8;
+    const permitSetUpliftFactor = permitSetBaseFactor + permitSetAdderSum;
     permitSetDollars = permitSetDollars * permitSetUpliftFactor;
 
-    // City comment revisions
-    const cityCommentsUpliftSum = activeFlags.reduce((sum, f) => sum + (f.cityCommentsAdder || 0), 0);
-    const cityCommentsUpliftFactor = 1 + cityCommentsUpliftSum;
-    const cityCommentsDollars = architectShare * cfg.cityCommentsBasePct * cityCommentsUpliftFactor;
+    // City Comment Revisions: a percentage of the (post-flag) permit set value.
+    const cityCommentsPctOfPermitSet = (cfg.cityCommentsPctOfPermitSet != null) ? cfg.cityCommentsPctOfPermitSet : 0.25;
+    const cityCommentsDollars = permitSetDollars * cityCommentsPctOfPermitSet;
 
     const schedule = cfg.feeSchedule;
     const bracketIdx = window.aeConfig.feeBracketIndex(effCost, schedule);
@@ -208,7 +287,7 @@
       totalStructuralFee,
       architectShare,
       permitSetUpliftFactor,
-      cityCommentsUpliftFactor,
+      cityCommentsPctOfPermitSet,
       schedule: {
         categoryKey,
         categoryLabel: category ? category.shortLabel : '',
@@ -232,8 +311,8 @@
       structural_engineering: structuralEngineeringDollars,
       bidding_negotiation: biddingDollars,
       city_comment_revisions: cityCommentsDollars,
-      design_ca: designCaDollars,
-      structural_ca: structuralCaDollars,
+      design_ca: designCaDollarsAdjusted,
+      structural_ca: structuralCaDollarsAdjusted,
     };
 
     // Build sections
@@ -362,16 +441,19 @@
   // ---------- Rendering ----------
 
   function render() {
-    const cfg = window.aeConfig.loadConfig();
+    const cfg = ensureConfig();
     const result = calculate(state, cfg);
 
     app.innerHTML = `
       <div class="estimate-form ae-form">
         <div class="form-header">
           <h2>A/E Estimate</h2>
-          <div style="display:flex; gap:0.5rem;">
+          <div class="ae-form-header-buttons">
+            <button class="btn btn-secondary" id="aeBtnSettings">Settings</button>
             <button class="btn btn-secondary" id="aeBtnImport">Import</button>
-            <button class="btn btn-secondary" id="aeBtnReset">Reset</button>
+            <button class="btn btn-secondary" id="aeBtnSaveDefault">Save as Default</button>
+            <button class="btn btn-secondary" id="aeBtnResetDefault">Reset to Defaults</button>
+            <button class="btn btn-secondary" id="aeBtnNewProject">New Project</button>
           </div>
         </div>
 
@@ -421,7 +503,7 @@
 
   function renderProgramSection() {
     const p = state.program;
-    const cfg = window.aeConfig.loadConfig();
+    const cfg = ensureConfig();
     const scopes = p.scopes || [];
     const totals = sumScopes(scopes);
     const canRemove = scopes.length > 1;
@@ -462,10 +544,14 @@
           <div class="form-group">
             <label for="aeBuildGrade">Build Grade</label>
             <select id="aeBuildGrade">
-              ${Object.keys(cfg.buildGrades).map((g) => {
-                const r = cfg.buildGrades[g];
-                return `<option value="${g}" ${p.buildGrade === g ? 'selected' : ''}>${cfg.buildGradeLabels[g] || g} ($${r.conditioned}/$${r.unconditioned} per sf)</option>`;
-              }).join('')}
+              ${(() => {
+                const grades = window.aeConfig.deriveBuildGrades(cfg.builderBaseConditionedSf);
+                const labels = window.aeConfig.BUILD_GRADE_LABELS;
+                return window.aeConfig.BUILD_GRADE_KEYS.map((g) => {
+                  const r = grades[g];
+                  return `<option value="${g}" ${p.buildGrade === g ? 'selected' : ''}>${labels[g] || g} ($${Math.round(r.conditioned)}/$${Math.round(r.unconditioned)} per sf)</option>`;
+                }).join('');
+              })()}
             </select>
           </div>
           <div class="form-group">
@@ -493,6 +579,12 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="aeRegionalMultiplier">Regional Multiplier <span class="ae-calc-hint">city/region cost adjustment vs national average (1.00 = US avg)</span></label>
+            <input type="number" id="aeRegionalMultiplier" min="0" step="0.05" value="${(p.regionalMultiplier != null ? p.regionalMultiplier : 1.00)}">
+          </div>
+        </div>
         <p class="help-text">Break the project into scopes (e.g., "Master suite remodel", "Garage to ADU"). Totals roll into the calculation; scope names are organizational only. <strong>Cond spaces</strong>: named rooms inside the thermal envelope. <strong>Uncond spaces</strong>: garages, porches, covered outdoor areas.</p>
       </div>
     `;
@@ -509,6 +601,7 @@
           <div class="ae-multiplier-chip"><span class="ae-chip-label">Size</span><span class="ae-chip-value">${fmtMult(s1.multipliers.size)}</span></div>
           <div class="ae-multiplier-chip"><span class="ae-chip-label">Cond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.conditionedDensity)}</span></div>
           <div class="ae-multiplier-chip"><span class="ae-chip-label">Uncond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.unconditionedDensity)}</span></div>
+          <div class="ae-multiplier-chip"><span class="ae-chip-label">Regional</span><span class="ae-chip-value">${fmtMult(s1.multipliers.regional)}</span></div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -525,9 +618,17 @@
           </div>
         </div>
         <div class="ae-calc-strip">
-          <div class="ae-calc-formula">
-            ${s1.totals.conditionedSf.toLocaleString()} cond sf × $${(s1.effCondRate).toFixed(2)}/sf
-            + ${s1.totals.unconditionedSf.toLocaleString()} uncond sf × $${(s1.effUncondRate).toFixed(2)}/sf
+          <div class="ae-calc-formula-line">
+            <span class="ae-calc-line-label">Conditioned $/sf:</span>
+            $${s1.baseline.conditioned.toFixed(2)} baseline × ${s1.multipliers.structural.toFixed(3)} structural × ${s1.multipliers.size.toFixed(3)} size × ${s1.multipliers.conditionedDensity.toFixed(3)} density × ${s1.multipliers.regional.toFixed(3)} regional = <strong>$${s1.calcCondRate.toFixed(2)}</strong>
+          </div>
+          <div class="ae-calc-formula-line">
+            <span class="ae-calc-line-label">Unconditioned $/sf:</span>
+            $${s1.baseline.unconditioned.toFixed(2)} baseline × ${s1.multipliers.structural.toFixed(3)} structural × ${s1.multipliers.size.toFixed(3)} size × ${s1.multipliers.unconditionedDensity.toFixed(3)} density × ${s1.multipliers.regional.toFixed(3)} regional = <strong>$${s1.calcUncondRate.toFixed(2)}</strong>
+          </div>
+          <div class="ae-calc-formula-line">
+            <span class="ae-calc-line-label">Construction cost:</span>
+            ${s1.totals.conditionedSf.toLocaleString()} cond sf × $${s1.effCondRate.toFixed(2)} + ${s1.totals.unconditionedSf.toLocaleString()} uncond sf × $${s1.effUncondRate.toFixed(2)}
           </div>
           <div class="ae-calc-result">
             <span class="ae-calc-label">Construction Cost</span>
@@ -559,8 +660,8 @@
         </div>
         <div class="ae-calc-strip">
           <div class="ae-calc-formula">
-            ${fmtMoney(result.stage1.effCost)} × ${(s2.feePct * 100).toFixed(2)}% = ${fmtMoney(s2.totalFeeBase)}
-            &nbsp;·&nbsp; structural carve-out −${fmtMoney(s2.totalStructuralFee)}
+            ${fmtMoney(result.stage1.effCost)} × ${(s2.feePct * 100).toFixed(2)}%
+            <span class="ae-calc-hint">(structural fees compute separately — see Structural Engineering section)</span>
           </div>
           <div class="ae-calc-result">
             <span class="ae-calc-label">Base Architect Fee</span>
@@ -713,6 +814,7 @@
     attachSelect('aeStructuralComplexity', (v) => { state.program.structuralComplexity = v; render(); });
     attachSelect('aeBuildingCategory', (v) => { state.program.buildingCategory = v; render(); });
     attachSelect('aeProjectComplexity', (v) => { state.program.projectComplexity = v; render(); });
+    attachNumber('aeRegionalMultiplier', (v) => { state.program.regionalMultiplier = v > 0 ? v : 1.0; render(); });
 
     // Stage 1 overrides (empty string clears the override)
     attachNumberOrClear('aeCondRateOverride',   (v) => { state.stage1Overrides.conditionedRate = v; render(); });
@@ -730,15 +832,15 @@
       });
     });
 
-    // Fee schedule factor lives in config; edits persist to localStorage.
+    // Fee schedule factor lives in state.config (per-project). Use Settings →
+    // "Save as Default" to persist to localStorage.
     const factorEl = document.getElementById('aeScheduleFactor');
     if (factorEl) {
       factorEl.addEventListener('change', () => {
         const raw = parseFloat(factorEl.value);
         const v = isFinite(raw) && raw >= 0 ? raw : 1.0;
-        const cfg = window.aeConfig.loadConfig();
-        cfg.feeSchedule.factor = v;
-        window.aeConfig.saveConfig(cfg);
+        ensureConfig();
+        state.config.feeSchedule.factor = v;
         render();
       });
     }
@@ -806,7 +908,7 @@
     const addBtn = document.getElementById('aeAddServiceBtn');
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        const cfg = window.aeConfig.loadConfig();
+        const cfg = ensureConfig();
         state.additionalServices.push({
           id: 'svc_' + Math.random().toString(36).slice(2, 10),
           label: '',
@@ -865,12 +967,51 @@
     // Top-level buttons
     document.getElementById('aeBtnExport').addEventListener('click', () => { exportProject(); });
     document.getElementById('aeBtnImport').addEventListener('click', () => { importProject(); });
-    document.getElementById('aeBtnReset').addEventListener('click', () => {
-      if (confirm('Reset this A/E estimate? Settings are not affected.')) {
-        state = makeInitialState();
-        render();
-      }
+    const settingsBtn = document.getElementById('aeBtnSettings');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        if (!window.aeSettings) { alert('Settings module not loaded.'); return; }
+        ensureConfig();
+        window.aeSettings.open(state.config, (newConfig, alsoSaveAsDefault) => {
+          state.config = newConfig;
+          if (alsoSaveAsDefault) {
+            window.aeConfig.saveConfig(newConfig);
+          }
+          render();
+        });
+      });
+    }
+    document.getElementById('aeBtnSaveDefault').addEventListener('click', () => {
+      window.aeConfig.saveProgramDefaults(extractProgramDefaults(state.program));
+      flashHeaderButton('aeBtnSaveDefault', 'Saved as default');
     });
+    document.getElementById('aeBtnResetDefault').addEventListener('click', () => {
+      if (!confirm('Restore Build Grade, Structural Complexity, Building Category, Project Complexity, Regional Multiplier, and Scopes to your saved defaults? Project name, line edits, manual hours, and additional services are kept.')) return;
+      Object.assign(state.program, loadEffectiveProgramDefaults());
+      render();
+    });
+    document.getElementById('aeBtnNewProject').addEventListener('click', () => {
+      if (!confirm('Start a new project? Project name, line edits, manual hours, additional services, and other per-project work will be cleared.')) return;
+      const preservedConfig = state.config;
+      state = makeInitialState();
+      state.config = preservedConfig;
+      refreshExportSnapshot();
+      render();
+    });
+  }
+
+  function flashHeaderButton(id, label) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.textContent = label;
+    btn.classList.add('ae-btn-flash');
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('ae-btn-flash');
+      btn.disabled = false;
+    }, 900);
   }
 
   // ---------- Export / Import (per-tool, v3 envelope) ----------
@@ -897,6 +1038,7 @@
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
+        refreshExportSnapshot();
         return;
       } catch (e) {
         if (e.name === 'AbortError') return;
@@ -911,6 +1053,7 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    refreshExportSnapshot();
   }
 
   function importProject() {
@@ -1034,6 +1177,10 @@
       if (!state.lineExclusions || typeof state.lineExclusions !== 'object') state.lineExclusions = {};
       // Drop legacy CD Level field (replaced by per-line include/exclude).
       delete state.stage2.cdLevel;
+      // Drop legacy "feasibility" manual hours / overrides (line removed).
+      if (state.manualHours) delete state.manualHours.feasibility;
+      if (state.lineOverrides) delete state.lineOverrides.feasibility;
+      if (state.lineExclusions) delete state.lineExclusions.feasibility;
       // Migrate older saves: flat sf/spaces fields → single Scope 1.
       if (!Array.isArray(state.program.scopes) || state.program.scopes.length === 0) {
         state.program.scopes = [makeScope(
@@ -1049,12 +1196,73 @@
       delete state.program.conditionedSpaces;
       delete state.program.unconditionedSf;
       delete state.program.unconditionedSpaces;
+      // Per-project config: if missing (older v3 or v2 imports), fall back to
+      // the user's saved defaults.
+      if (!state.config || typeof state.config !== 'object') {
+        state.config = window.aeConfig.loadConfig();
+      }
+      refreshExportSnapshot();
       render();
     },
-    reset: () => { state = makeInitialState(); render(); },
+    reset: () => {
+      const preservedConfig = state.config;
+      state = makeInitialState();
+      state.config = preservedConfig;
+      refreshExportSnapshot();
+      render();
+    },
+    getConfig: () => { ensureConfig(); return state.config; },
+    setConfig: (cfg) => { state.config = cfg; render(); },
     // Exposed for tests / debugging:
     _calculate: calculate,
   };
+
+  // ---------- Unload guard ----------
+  // Browser shows generic "leave site?" prompt when either:
+  //  - per-project work has changed since the last Export Estimate, OR
+  //  - default-able fields differ from the saved program defaults.
+  // Save as Default clears the default drift; Export Estimate clears the
+  // per-project drift.
+
+  function extractPerProjectState(s) {
+    return {
+      identity: s.identity || {},
+      stage1Overrides: s.stage1Overrides || {},
+      activeFlags: (s.stage2 && s.stage2.activeFlags) || [],
+      manualHours: s.manualHours || {},
+      additionalServices: s.additionalServices || [],
+      lineOverrides: s.lineOverrides || {},
+      lineExclusions: s.lineExclusions || {},
+    };
+  }
+
+  let lastExportedPerProject = null;
+  function refreshExportSnapshot() {
+    lastExportedPerProject = JSON.stringify(extractPerProjectState(state));
+  }
+
+  function perProjectIsDirty() {
+    if (lastExportedPerProject == null) refreshExportSnapshot();
+    return JSON.stringify(extractPerProjectState(state)) !== lastExportedPerProject;
+  }
+
+  function programDefaultsAreDrifted() {
+    const saved = window.aeConfig.loadProgramDefaults();
+    const baseline = saved ? Object.assign(shippedProgramDefaults(), saved) : shippedProgramDefaults();
+    return JSON.stringify(extractProgramDefaults(state.program)) !== JSON.stringify(extractProgramDefaults(baseline));
+  }
+
+  function hasUnsavedWork() {
+    if (!state) return false;
+    return perProjectIsDirty() || programDefaultsAreDrifted();
+  }
+
+  window.addEventListener('beforeunload', (e) => {
+    if (hasUnsavedWork()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 
   // Initial render — runs as the page loads.
   render();

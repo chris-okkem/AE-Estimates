@@ -4,11 +4,11 @@
 window.aeConfig = (function () {
   const STORAGE_KEY = 'aeConfig';
   const BACKUP_KEY = 'aeConfigBackups';
+  const PROGRAM_DEFAULTS_KEY = 'aeProgramDefaults';
   const MAX_BACKUPS = 20;
 
   const DEFAULT_CONFIG = {
     hourlyRates: {
-      feasibility: 190,
       site_visit: 190,
       scan: 130,
       base_model: 130,
@@ -27,20 +27,12 @@ window.aeConfig = (function () {
       structural_ca: 190,
       additional_services_default: 142,
     },
-    buildGrades: {
-      builder:     { conditioned: 280,  unconditioned: 150 },
-      mid_custom:  { conditioned: 400,  unconditioned: 210 },
-      high_custom: { conditioned: 550,  unconditioned: 290 },
-      luxury:      { conditioned: 750,  unconditioned: 400 },
-      ultra:       { conditioned: 1100, unconditioned: 600 },
-    },
-    buildGradeLabels: {
-      builder: 'Builder',
-      mid_custom: 'Mid Custom',
-      high_custom: 'High Custom',
-      luxury: 'Luxury',
-      ultra: 'Ultra',
-    },
+    // The user only sets the Builder Grade conditioned base $/sf.
+    // All other grade rates derive via hardcoded ratios + markup stack
+    // (see deriveBuildGrades below). Represents an RSMeans-style Economy
+    // hard cost (labor + materials only, national average, excluding GC
+    // overhead and profit).
+    builderBaseConditionedSf: 200,
     structuralComplexityLabels: { low: 'Low', medium: 'Medium', high: 'High' },
     structuralMultipliers: {
       stage1: { low: 0.75, medium: 1.0, high: 1.25 },
@@ -65,7 +57,7 @@ window.aeConfig = (function () {
     // Each category row's pcts[] aligns with brackets[]. Final fee % =
     //   basePct × projectComplexityFactor × factor (global tunable).
     feeSchedule: {
-      factor: 1.0,
+      factor: 0.5,
       projectComplexityFactors: { simple: 0.85, normal: 1.00, complex: 1.15 },
       projectComplexityLabels:  { simple: 'Simple', normal: 'Normal', complex: 'Complex' },
       brackets: [
@@ -114,20 +106,79 @@ window.aeConfig = (function () {
       bidSet: 0.25,
       constructionSet: 0.50,
     },
-    cityCommentsBasePct: 0.05,
+    // How much of Construction Administration each CD sub-level "anchors".
+    // Applies to both Design CA and Structural CA. With defaults: excluding
+    // Construction Set cuts CA in half; also excluding Bid Set drops CA to
+    // zero (you don't do CA without bid + construction documents). Sums to 1.0.
+    constructionAdministrationCdSplit: {
+      permitSet: 0.00,
+      bidSet: 0.50,
+      constructionSet: 0.50,
+    },
+    // Permit Set sizing: permit_set_dollars = base × (permitSetBaseFactor + Σ active permit adders).
+    // With no flags active, permit set is reduced to 80% of its CD-split allocation.
+    // Each active flag adds work back on top.
+    permitSetBaseFactor: 0.8,
+    // City Comment Revisions allowance is a fraction of the (post-flag) permit set value.
+    cityCommentsPctOfPermitSet: 0.25,
     regulatoryFlags: [
-      { id: 'subchapter_f',        label: 'Subchapter F (McMansion)',   permitSetAdder: 0.15, cityCommentsAdder: 0.40 },
-      { id: 'heritage_tree_review', label: 'Heritage Tree Review',      permitSetAdder: 0.10, cityCommentsAdder: 0.50 },
-      { id: 'tree_protection_plan', label: 'Tree Protection Plan',      permitSetAdder: 0.10, cityCommentsAdder: 0.20 },
-      { id: 'historic_district',    label: 'Historic District',         permitSetAdder: 0.25, cityCommentsAdder: 0.50 },
-      { id: 'hillside',             label: 'Hillside (>15% slope)',     permitSetAdder: 0.10, cityCommentsAdder: 0.30 },
-      { id: 'floodplain',           label: 'Floodplain',                permitSetAdder: 0.15, cityCommentsAdder: 0.20 },
+      { id: 'subchapter_f',     label: 'Subchapter F',                permitSetAdder: 0.15 },
+      { id: 'protected_trees',  label: 'Protected trees',             permitSetAdder: 0.15 },
+      { id: 'historic_district', label: 'Historic district',          permitSetAdder: 0.25 },
+      { id: 'hillside',         label: 'Hillside',                    permitSetAdder: 0.10 },
+      { id: 'floodplain',       label: 'Floodplain',                  permitSetAdder: 0.15 },
+      { id: 'water_quality_overlay', label: 'Water quality overlay',  permitSetAdder: 0.10 },
+      { id: 'wildlife_urban_interface', label: 'Wildlife Urban Interface', permitSetAdder: 0.10 },
+      { id: 'visitability_plan', label: 'Visitability plan',          permitSetAdder: 0.05 },
     ],
   };
 
+  // ---------- Build grade derivation ----------
+  // The user only edits the Builder Grade conditioned base $/sf. Every other
+  // grade and area-type value derives from these hardcoded constants.
+
+  const BUILD_GRADE_KEYS = ['builder', 'mid_custom', 'high_custom', 'luxury', 'ultra'];
+  const BUILD_GRADE_LABELS = {
+    builder: 'Builder',
+    mid_custom: 'Mid Custom',
+    high_custom: 'High Custom',
+    luxury: 'Luxury',
+    ultra: 'Ultra',
+  };
+  const GRADE_RATIOS = {       // applied to builder base to get each grade's base conditioned $/sf
+    builder: 1.00, mid_custom: 1.40, high_custom: 1.90, luxury: 2.60, ultra: 3.75,
+  };
+  const MARKUP_STACK = {       // GC overhead + profit per grade
+    builder: 1.17, mid_custom: 1.20, high_custom: 1.23, luxury: 1.25, ultra: 1.28,
+  };
+  const UNCONDITIONED_RATIO = 0.54;
+
+  function deriveBuildGrades(builderBase) {
+    const base = isFinite(builderBase) && builderBase > 0 ? builderBase : 140;
+    const out = {};
+    BUILD_GRADE_KEYS.forEach((k) => {
+      const baseCond = base * GRADE_RATIOS[k];
+      const finalCond = baseCond * MARKUP_STACK[k];
+      const finalUncond = finalCond * UNCONDITIONED_RATIO;
+      out[k] = {
+        baseConditioned: baseCond,
+        conditioned: finalCond,
+        unconditioned: finalUncond,
+        ratio: GRADE_RATIOS[k],
+        markup: MARKUP_STACK[k],
+      };
+    });
+    return out;
+  }
+
   // ---------- Curve math ----------
 
-  // U-shaped size curve. Small side steepens via progress^1.5; large side linear.
+  // Size curve. Small side steepens via progress^1.5; large side linear. The
+  // curve extrapolates past the small and large anchors using the same
+  // formulas (no clamping) so values outside the anchor range stay continuous.
+  // Result is floored at SIZE_CURVE_FLOOR to keep extrapolation past a
+  // below-1.0 large anchor from running away to absurdly low multipliers.
+  const SIZE_CURVE_FLOOR = 0.75;
   function sizeCurveMultiplier(sf, curve) {
     const small = curve.small.position;
     const std   = curve.standard.position;
@@ -135,18 +186,21 @@ window.aeConfig = (function () {
     const smallM = curve.small.multiplier;
     const largeM = curve.large.multiplier;
 
-    if (!isFinite(sf) || sf <= 0) return 1.0;
-    if (sf <= small) return smallM;
-    if (sf >= large) return largeM;
+    if (!isFinite(sf)) return 1.0;
+    let m;
     if (sf <= std) {
       const progress = (std - sf) / (std - small);
-      return 1.0 + (smallM - 1.0) * Math.pow(progress, 1.5);
+      // Negative sf can't actually happen in inputs, but guard the exponent.
+      m = 1.0 + (smallM - 1.0) * Math.pow(Math.max(progress, 0), 1.5);
+    } else {
+      const progress = (sf - std) / (large - std);
+      m = 1.0 + (largeM - 1.0) * progress;
     }
-    const progress = (sf - std) / (large - std);
-    return 1.0 + (largeM - 1.0) * progress;
+    return Math.max(m, SIZE_CURVE_FLOOR);
   }
 
-  // Linear density curve on each side of standard.
+  // Density curve. Linear on each side of standard, extrapolated past the
+  // sparse and dense anchors with the same formula (no clamping).
   function densityCurveMultiplier(density, curve) {
     const sparse = curve.sparse.position;
     const std    = curve.standard.position;
@@ -154,9 +208,7 @@ window.aeConfig = (function () {
     const sparseM = curve.sparse.multiplier;
     const denseM  = curve.dense.multiplier;
 
-    if (!isFinite(density) || density <= 0) return sparseM;
-    if (density <= sparse) return sparseM;
-    if (density >= dense) return denseM;
+    if (!isFinite(density)) return 1.0;
     if (density <= std) {
       const progress = (std - density) / (std - sparse);
       return 1.0 + (sparseM - 1.0) * progress;
@@ -239,6 +291,27 @@ window.aeConfig = (function () {
     saveConfig(deepClone(DEFAULT_CONFIG));
   }
 
+  // ---------- Program defaults persistence (estimate-side) ----------
+
+  function loadProgramDefaults() {
+    try {
+      const raw = localStorage.getItem(PROGRAM_DEFAULTS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn('Failed to load A/E program defaults:', e);
+      return null;
+    }
+  }
+
+  function saveProgramDefaults(defaults) {
+    try {
+      localStorage.setItem(PROGRAM_DEFAULTS_KEY, JSON.stringify(defaults));
+    } catch (e) {
+      console.warn('Failed to save A/E program defaults:', e);
+    }
+  }
+
   return {
     DEFAULT_CONFIG,
     sizeCurveMultiplier,
@@ -249,6 +322,15 @@ window.aeConfig = (function () {
     saveConfig,
     loadBackups,
     resetToDefaults,
+    loadProgramDefaults,
+    saveProgramDefaults,
     deepClone,
+    BUILD_GRADE_KEYS,
+    BUILD_GRADE_LABELS,
+    GRADE_RATIOS,
+    MARKUP_STACK,
+    UNCONDITIONED_RATIO,
+    SIZE_CURVE_FLOOR,
+    deriveBuildGrades,
   };
 })();
