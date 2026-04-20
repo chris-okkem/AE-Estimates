@@ -1479,7 +1479,7 @@
       <p style="${font}"><strong>Project Assumptions</strong></p>
       <p style="${font}">The estimate assumes the following. Variations from these assumptions may affect scope, schedule, or fee.</p>
       <ul style="${font}">
-        <li style="${font}"><strong>Construction Cost:</strong> Anticipated construction cost of approximately ${money(effCost)}, based on a build grade of ${escapeHtml(buildGradeLabel)}.</li>
+        <li style="${font}"><strong>Build Grade:</strong> ${escapeHtml(buildGradeLabel)}</li>
         ${areaLines.join('')}
         <li style="${font}"><strong>Structural Complexity:</strong> ${escapeHtml(structComplexityLabel)}.</li>
         <li style="${font}">[Additional Assumptions Here]</li>
