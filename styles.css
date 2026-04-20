@@ -643,7 +643,52 @@ main {
   margin-left: 0.25rem;
 }
 
-/* Scopes table */
+/* Program items (narrative list) */
+.ae-program-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.ae-program-item {
+  display: grid;
+  grid-template-columns: 1fr 28px;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ae-program-item input[type="text"] {
+  width: 100%;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.ae-program-item input[type="text"]:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.ae-program-item-remove {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1rem;
+  border-radius: 4px;
+}
+
+.ae-program-item-remove:hover {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* Scopes (areas) table */
 .ae-scopes {
   display: flex;
   flex-direction: column;
@@ -653,9 +698,42 @@ main {
 
 .ae-scope-row {
   display: grid;
-  grid-template-columns: 2fr 0.9fr 0.9fr 0.9fr 0.9fr 24px;
+  grid-template-columns: 1.6fr 1.4fr 0.7fr 0.7fr 0.7fr 0.7fr 24px;
   gap: 0.5rem;
   align-items: center;
+}
+
+.ae-scope-type-toggle {
+  display: inline-flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.ae-scope-type-btn {
+  flex: 1;
+  padding: 0.3rem 0.25rem;
+  font-size: 0.75rem;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.ae-scope-type-btn + .ae-scope-type-btn {
+  border-left: 1px solid #e2e8f0;
+}
+
+.ae-scope-type-btn.active {
+  background: #1e293b;
+  color: #fff;
+  font-weight: 600;
+}
+
+.ae-scope-type-btn:hover:not(.active) {
+  background: #f1f5f9;
 }
 
 .ae-scope-header {
@@ -718,6 +796,7 @@ main {
     row-gap: 0.25rem;
   }
   .ae-scope-header { display: none; }
+  .ae-scope-type-toggle { grid-column: 1 / -1; }
 }
 
 /* Stage 1 multiplier strip */

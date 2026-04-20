@@ -6,7 +6,7 @@
   // ---------- Line/section definitions ----------
 
   const LINE_LABELS = {
-    site_visit: 'Site Visit',
+    site_visit: 'Site Visit / Assessment',
     scan: '3D Scan',
     base_model: 'Base Model',
     as_builts: 'As-Builts',
@@ -37,20 +37,32 @@
     { id: 'additional-services',    label: 'Additional Services',         lineIds: [] },
   ];
 
+  const SCOPE_TYPES = ['remodel', 'addition', 'new_construction'];
+  const SCOPE_TYPE_LABELS = { remodel: 'Remodel', addition: 'Addition', new_construction: 'New' };
+
   // ---------- State ----------
 
   let state = makeInitialState();
   const collapsedSections = new Set();
 
-  function makeScope(name, condSf, condSpaces, uncondSf, uncondSpaces) {
+  function makeScope(name, condSf, condSpaces, uncondSf, uncondSpaces, type) {
     return {
       id: 'scope_' + Math.random().toString(36).slice(2, 10),
       name: name || '',
+      type: SCOPE_TYPES.includes(type) ? type : 'new_construction',
       conditionedSf: condSf || 0,
       conditionedSpaces: condSpaces || 0,
       unconditionedSf: uncondSf || 0,
       unconditionedSpaces: uncondSpaces || 0,
     };
+  }
+
+  function normalizeScopes(scopes) {
+    return (scopes || []).map((s) => {
+      if (!s) return makeScope('', 0, 0, 0, 0);
+      if (!SCOPE_TYPES.includes(s.type)) s.type = 'new_construction';
+      return s;
+    });
   }
 
   function sumScopes(scopes) {
@@ -63,22 +75,25 @@
     }, { conditionedSf: 0, conditionedSpaces: 0, unconditionedSf: 0, unconditionedSpaces: 0 });
   }
 
-  // Default-able program inputs that participate in "Save as Default".
-  // Per-project fields (identity, manualHours, line overrides, etc.) are NOT
+  // Default-able program inputs + line include/exclude toggles that
+  // participate in "Save as Default". Per-project fields (identity,
+  // manualHours, line dollar overrides, additional services, etc.) are NOT
   // part of this snapshot.
   function shippedProgramDefaults() {
     return {
-      scopes: [makeScope('Scope 1', 3000, 18, 500, 2)],
+      scopes: [makeScope('Area 1', 3000, 18, 500, 2)],
       buildGrade: 'mid_custom',
       structuralComplexity: 'medium',
       buildingCategory: '7',
       projectComplexity: 'simple',
       regionalMultiplier: 1.15,
+      lineExclusions: {},
     };
   }
 
-  // Returns the user's saved program defaults, falling back to shipped values
-  // for any missing fields. Always returns a fresh, deep-cloned object.
+  // Returns the user's saved program defaults (flat shape), falling back to
+  // shipped values for any missing fields. Always returns a fresh,
+  // deep-cloned object.
   function loadEffectiveProgramDefaults() {
     const stored = window.aeConfig.loadProgramDefaults();
     const shipped = shippedProgramDefaults();
@@ -86,29 +101,43 @@
     if (!Array.isArray(merged.scopes) || merged.scopes.length === 0) {
       merged.scopes = shippedProgramDefaults().scopes;
     }
+    merged.scopes = normalizeScopes(merged.scopes);
+    if (!merged.lineExclusions || typeof merged.lineExclusions !== 'object') merged.lineExclusions = {};
     return window.aeConfig.deepClone(merged);
   }
 
-  // Pull the default-able subset out of state.program.
-  function extractProgramDefaults(program) {
+  // Pull the default-able subset out of state (program fields + line
+  // exclusions). Matches the flat shape returned by loadEffectiveProgramDefaults.
+  function extractProgramDefaults(s) {
+    const p = s.program || {};
     return {
-      scopes: window.aeConfig.deepClone(program.scopes || []),
-      buildGrade: program.buildGrade,
-      structuralComplexity: program.structuralComplexity,
-      buildingCategory: program.buildingCategory,
-      projectComplexity: program.projectComplexity,
-      regionalMultiplier: program.regionalMultiplier,
+      scopes: window.aeConfig.deepClone(p.scopes || []),
+      buildGrade: p.buildGrade,
+      structuralComplexity: p.structuralComplexity,
+      buildingCategory: p.buildingCategory,
+      projectComplexity: p.projectComplexity,
+      regionalMultiplier: p.regionalMultiplier,
+      lineExclusions: window.aeConfig.deepClone(s.lineExclusions || {}),
     };
   }
 
+  // Apply a flat defaults object back into state (program fields + exclusions).
+  function applyDefaultsToState(defaults) {
+    const { lineExclusions, ...programFields } = defaults;
+    Object.assign(state.program, programFields);
+    state.lineExclusions = lineExclusions || {};
+  }
+
   function makeInitialState() {
+    const defaults = loadEffectiveProgramDefaults();
+    const { lineExclusions, ...program } = defaults;
     return {
       identity: {
-        projectName: '',
+        projectAddress: '',
         clientName: '',
-        projectType: 'new',
       },
-      program: loadEffectiveProgramDefaults(),
+      programItems: [],
+      program,
       stage1Overrides: {
         conditionedRate: null,
         unconditionedRate: null,
@@ -126,7 +155,7 @@
       },
       additionalServices: [],
       lineOverrides: {},
-      lineExclusions: {},
+      lineExclusions: lineExclusions || {},
       config: null, // populated lazily from aeConfig.loadConfig(); preserved across reset()
     };
   }
@@ -458,6 +487,7 @@
         </div>
 
         ${renderIdentitySection()}
+        ${renderProgramItemsSection()}
         ${renderProgramSection()}
         ${renderStage1Section(cfg, result)}
         ${renderStage2Section(cfg, result)}
@@ -465,6 +495,7 @@
 
         <div class="form-actions">
           <button class="btn btn-primary" id="aeBtnExport">Export Estimate</button>
+          <button class="btn btn-primary" id="aeBtnProposal">Generate Proposal</button>
         </div>
       </div>
     `;
@@ -478,27 +509,36 @@
       <div class="form-section">
         <h3>Project</h3>
         <div class="form-row">
-          <div class="form-group" style="flex:2">
-            <label for="aeProjectName">Project Name</label>
-            <input type="text" id="aeProjectName" value="${escapeAttr(i.projectName)}" placeholder="e.g. Smith Residence">
-          </div>
-          <div class="form-group" style="flex:2">
-            <label for="aeClientName">Client</label>
-            <input type="text" id="aeClientName" value="${escapeAttr(i.clientName)}" placeholder="Client name">
+          <div class="form-group" style="flex:1">
+            <label for="aeProjectAddress">Project Address</label>
+            <input type="text" id="aeProjectAddress" value="${escapeAttr(i.projectAddress)}" placeholder="e.g. 1234 Main St, Austin, TX">
           </div>
           <div class="form-group" style="flex:1">
-            <label for="aeProjectType">Type</label>
-            <select id="aeProjectType">
-              ${['new', 'addition', 'renovation', 'adaptive_reuse'].map((t) => `<option value="${t}" ${i.projectType === t ? 'selected' : ''}>${projectTypeLabel(t)}</option>`).join('')}
-            </select>
+            <label for="aeClientName">Client</label>
+            <input type="text" id="aeClientName" value="${escapeAttr(i.clientName)}" placeholder="Client name">
           </div>
         </div>
       </div>
     `;
   }
 
-  function projectTypeLabel(t) {
-    return { new: 'New', addition: 'Addition', renovation: 'Renovation', adaptive_reuse: 'Adaptive Reuse' }[t] || t;
+  function renderProgramItemsSection() {
+    const items = state.programItems || [];
+    return `
+      <div class="form-section">
+        <h3>Program</h3>
+        <p class="help-text">Narrative list of what the project includes (e.g., "Enlarge master bathroom", "New ADU above garage"). Organizational only — not used in the calculation.</p>
+        <div class="ae-program-items">
+          ${items.map((it) => `
+            <div class="ae-program-item" data-item-id="${it.id}">
+              <input type="text" class="ae-program-item-text" data-item-id="${it.id}" value="${escapeAttr(it.text || '')}" placeholder="e.g., Enlarge master bathroom">
+              <button class="ae-program-item-remove" data-item-id="${it.id}" title="Remove">×</button>
+            </div>
+          `).join('')}
+        </div>
+        <div class="ae-add-row"><button class="btn btn-small" id="aeAddProgramItemBtn">+ Add Item</button></div>
+      </div>
+    `;
   }
 
   function renderProgramSection() {
@@ -510,10 +550,11 @@
 
     return `
       <div class="form-section">
-        <h3>Program</h3>
+        <h3>Areas in Scope</h3>
         <div class="ae-scopes">
           <div class="ae-scope-row ae-scope-header">
-            <span>Scope</span>
+            <span>Area</span>
+            <span>Type</span>
             <span>Cond sf</span>
             <span>Cond spaces</span>
             <span>Uncond sf</span>
@@ -522,23 +563,27 @@
           </div>
           ${scopes.map((sc) => `
             <div class="ae-scope-row" data-scope-id="${sc.id}">
-              <input type="text"   class="ae-scope-name"  data-scope-id="${sc.id}" value="${escapeAttr(sc.name)}" placeholder="Scope name">
+              <input type="text"   class="ae-scope-name"  data-scope-id="${sc.id}" value="${escapeAttr(sc.name)}" placeholder="Area name">
+              <div class="ae-scope-type-toggle">
+                ${SCOPE_TYPES.map((t) => `<button type="button" class="ae-scope-type-btn ${sc.type === t ? 'active' : ''}" data-scope-id="${sc.id}" data-scope-type="${t}">${SCOPE_TYPE_LABELS[t]}</button>`).join('')}
+              </div>
               <input type="number" class="ae-scope-csf"   data-scope-id="${sc.id}" min="0" step="50" value="${sc.conditionedSf || 0}">
               <input type="number" class="ae-scope-csp"   data-scope-id="${sc.id}" min="0" step="1"  value="${sc.conditionedSpaces || 0}">
               <input type="number" class="ae-scope-usf"   data-scope-id="${sc.id}" min="0" step="50" value="${sc.unconditionedSf || 0}">
               <input type="number" class="ae-scope-usp"   data-scope-id="${sc.id}" min="0" step="1"  value="${sc.unconditionedSpaces || 0}">
-              ${canRemove ? `<button class="ae-scope-remove" data-scope-id="${sc.id}" title="Remove scope">×</button>` : '<span></span>'}
+              ${canRemove ? `<button class="ae-scope-remove" data-scope-id="${sc.id}" title="Remove area">×</button>` : '<span></span>'}
             </div>
           `).join('')}
           <div class="ae-scope-row ae-scope-totals">
-            <span>Total (${scopes.length} scope${scopes.length === 1 ? '' : 's'})</span>
+            <span>Total (${scopes.length} area${scopes.length === 1 ? '' : 's'})</span>
+            <span></span>
             <span>${totals.conditionedSf.toLocaleString()}</span>
             <span>${totals.conditionedSpaces}</span>
             <span>${totals.unconditionedSf.toLocaleString()}</span>
             <span>${totals.unconditionedSpaces}</span>
             <span></span>
           </div>
-          <div class="ae-add-row"><button class="btn btn-small" id="aeAddScopeBtn">+ Add Scope</button></div>
+          <div class="ae-add-row"><button class="btn btn-small" id="aeAddScopeBtn">+ Add Area</button></div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -585,7 +630,7 @@
             <input type="number" id="aeRegionalMultiplier" min="0" step="0.05" value="${(p.regionalMultiplier != null ? p.regionalMultiplier : 1.00)}">
           </div>
         </div>
-        <p class="help-text">Break the project into scopes (e.g., "Master suite remodel", "Garage to ADU"). Totals roll into the calculation; scope names are organizational only. <strong>Cond spaces</strong>: named rooms inside the thermal envelope. <strong>Uncond spaces</strong>: garages, porches, covered outdoor areas.</p>
+        <p class="help-text">Break the project into areas (e.g., "Existing house", "Addition", "ADU"). Totals roll into the calculation; area names and type are organizational only. <strong>Cond spaces</strong>: named rooms inside the thermal envelope. <strong>Uncond spaces</strong>: garages, porches, covered outdoor areas.</p>
       </div>
     `;
   }
@@ -779,15 +824,43 @@
 
   function bindEvents() {
     // Identity
-    attachText('aeProjectName',  (v) => { state.identity.projectName = v; }, false);
-    attachText('aeClientName',   (v) => { state.identity.clientName = v; }, false);
-    attachSelect('aeProjectType', (v) => { state.identity.projectType = v; render(); });
+    attachText('aeProjectAddress', (v) => { state.identity.projectAddress = v; }, false);
+    attachText('aeClientName',     (v) => { state.identity.clientName = v; }, false);
+
+    // Program items (narrative list)
+    document.querySelectorAll('.ae-program-item-text').forEach((el) => {
+      el.addEventListener('change', () => {
+        const item = (state.programItems || []).find((x) => x.id === el.dataset.itemId);
+        if (item) item.text = el.value;
+      });
+    });
+    document.querySelectorAll('.ae-program-item-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.programItems = (state.programItems || []).filter((x) => x.id !== btn.dataset.itemId);
+        render();
+      });
+    });
+    const addItemBtn = document.getElementById('aeAddProgramItemBtn');
+    if (addItemBtn) {
+      addItemBtn.addEventListener('click', () => {
+        (state.programItems = state.programItems || []).push({ id: 'item_' + Math.random().toString(36).slice(2, 10), text: '' });
+        render();
+      });
+    }
 
     // Program — scopes
     document.querySelectorAll('.ae-scope-name').forEach((el) => {
       el.addEventListener('change', () => {
         const sc = findScope(el.dataset.scopeId);
         if (sc) { sc.name = el.value; render(); }
+      });
+    });
+    document.querySelectorAll('.ae-scope-type-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sc = findScope(btn.dataset.scopeId);
+        if (!sc) return;
+        sc.type = btn.dataset.scopeType;
+        render();
       });
     });
     document.querySelectorAll('.ae-scope-csf').forEach((el) => bindScopeNumber(el, 'conditionedSf'));
@@ -805,7 +878,7 @@
     if (addScopeBtn) {
       addScopeBtn.addEventListener('click', () => {
         const n = state.program.scopes.length + 1;
-        state.program.scopes.push(makeScope('Scope ' + n, 0, 0, 0, 0));
+        state.program.scopes.push(makeScope('Area ' + n, 0, 0, 0, 0));
         render();
       });
     }
@@ -967,6 +1040,8 @@
     // Top-level buttons
     document.getElementById('aeBtnExport').addEventListener('click', () => { exportProject(); });
     document.getElementById('aeBtnImport').addEventListener('click', () => { importProject(); });
+    const proposalBtn = document.getElementById('aeBtnProposal');
+    if (proposalBtn) proposalBtn.addEventListener('click', () => { openProposalModal(); });
     const settingsBtn = document.getElementById('aeBtnSettings');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
@@ -982,12 +1057,12 @@
       });
     }
     document.getElementById('aeBtnSaveDefault').addEventListener('click', () => {
-      window.aeConfig.saveProgramDefaults(extractProgramDefaults(state.program));
+      window.aeConfig.saveProgramDefaults(extractProgramDefaults(state));
       flashHeaderButton('aeBtnSaveDefault', 'Saved as default');
     });
     document.getElementById('aeBtnResetDefault').addEventListener('click', () => {
-      if (!confirm('Restore Build Grade, Structural Complexity, Building Category, Project Complexity, Regional Multiplier, and Scopes to your saved defaults? Project name, line edits, manual hours, and additional services are kept.')) return;
-      Object.assign(state.program, loadEffectiveProgramDefaults());
+      if (!confirm('Restore Build Grade, Structural Complexity, Building Category, Project Complexity, Regional Multiplier, Areas, and line Include toggles to your saved defaults? Client name, line dollar edits, manual hours, and additional services are kept.')) return;
+      applyDefaultsToState(loadEffectiveProgramDefaults());
       render();
     });
     document.getElementById('aeBtnNewProject').addEventListener('click', () => {
@@ -1017,7 +1092,7 @@
   // ---------- Export / Import (per-tool, v3 envelope) ----------
 
   async function exportProject() {
-    const name = state.identity.projectName || 'Untitled Project';
+    const name = state.identity.projectAddress || 'Untitled Project';
     const safeName = name.replace(/[^a-zA-Z0-9 _\-]/g, '');
     const wrapper = {
       version: 3,
@@ -1156,6 +1231,377 @@
 
   // ---------- Public API ----------
 
+  // ---------- Generate Proposal (copy-to-clipboard formatted for Google Docs) ----------
+  //
+  // Mirrors Chris's proposal template. Fills in dynamic fields from state;
+  // keeps template narrative, assumptions, and T&Cs verbatim.
+
+  function openProposalModal() {
+    const existing = document.getElementById('aeProposalModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'aeProposalModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content modal-content-wide">
+        <h2>Generate Proposal</h2>
+        <p class="modal-subtitle">Fill in proposal-specific details, then preview and copy. Paste into Google Docs for a formatted proposal.</p>
+        <div class="modal-form">
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label for="aePropProposedScope">Proposed scope (short phrase)</label>
+              <input type="text" id="aePropProposedScope" placeholder="e.g. major remodel and second-story addition">
+            </div>
+          </div>
+          <h3 style="margin-top:0.75rem;">Durations (weeks)</h3>
+          <div class="form-row">
+            <div class="form-group"><label for="aePropPdWks">Pre-Design</label><input type="number" id="aePropPdWks" min="0" step="1" value="2"></div>
+            <div class="form-group"><label for="aePropSdWks">Schematic Design</label><input type="number" id="aePropSdWks" min="0" step="1" value="3"></div>
+            <div class="form-group"><label for="aePropPermitWks">Permit Set</label><input type="number" id="aePropPermitWks" min="0" step="1" value="4"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="aePropSeWks">Structural</label><input type="number" id="aePropSeWks" min="0" step="1" value="2"></div>
+            <div class="form-group"><label for="aePropBidWks">Bid Set</label><input type="number" id="aePropBidWks" min="0" step="1" value="2"></div>
+            <div class="form-group"><label for="aePropCdWks">Construction Set</label><input type="number" id="aePropCdWks" min="0" step="1" value="3"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label for="aePropRetainer">Retainer amount ($)</label>
+              <input type="number" id="aePropRetainer" min="0" step="100" placeholder="e.g. 5000">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label for="aePropYourName">Your name / firm signature</label>
+              <input type="text" id="aePropYourName" placeholder="e.g. Chris Okkem, Okkem Design">
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="aePropGenerate">Generate</button>
+          <button class="btn btn-secondary" id="aePropCancel">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('aePropCancel').addEventListener('click', () => modal.remove());
+    document.getElementById('aePropGenerate').addEventListener('click', () => {
+      const inputs = {
+        proposedScope:  document.getElementById('aePropProposedScope').value || '',
+        pdWks:          parseInt(document.getElementById('aePropPdWks').value) || 0,
+        sdWks:          parseInt(document.getElementById('aePropSdWks').value) || 0,
+        permitWks:      parseInt(document.getElementById('aePropPermitWks').value) || 0,
+        seWks:          parseInt(document.getElementById('aePropSeWks').value) || 0,
+        bidWks:         parseInt(document.getElementById('aePropBidWks').value) || 0,
+        cdWks:          parseInt(document.getElementById('aePropCdWks').value) || 0,
+        retainer:       parseFloat(document.getElementById('aePropRetainer').value) || 0,
+        yourName:       document.getElementById('aePropYourName').value || '',
+      };
+      modal.remove();
+      showProposalPreview(inputs);
+    });
+  }
+
+  function showProposalPreview(inputs) {
+    const existing = document.getElementById('aeProposalPreviewModal');
+    if (existing) existing.remove();
+
+    const cfg = ensureConfig();
+    const result = calculate(state, cfg);
+    const html = buildProposalHtml(result, inputs);
+
+    const modal = document.createElement('div');
+    modal.id = 'aeProposalPreviewModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content modal-content-wide">
+        <div class="modal-header-row">
+          <h2>Proposal Preview</h2>
+          <button class="btn btn-primary btn-copy" id="aePropCopy">Copy to Clipboard</button>
+        </div>
+        <div class="email-preview" id="aePropPreviewContent">${html}</div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="aePropClose">Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('aePropClose').addEventListener('click', () => modal.remove());
+    document.getElementById('aePropCopy').addEventListener('click', () => {
+      const previewEl = document.getElementById('aePropPreviewContent');
+      const btn = document.getElementById('aePropCopy');
+      function showCopied() {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+      }
+      if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        const htmlBlob = new Blob([previewEl.innerHTML], { type: 'text/html' });
+        const textBlob = new Blob([previewEl.innerText], { type: 'text/plain' });
+        navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })
+        ]).then(showCopied).catch(() => { copyViaSelection(previewEl); showCopied(); });
+      } else {
+        copyViaSelection(previewEl);
+        showCopied();
+      }
+    });
+  }
+
+  function copyViaSelection(el) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand('copy');
+    selection.removeAllRanges();
+  }
+
+  function summarizeAreasByType(scopes) {
+    const out = { remodel: { cond: 0, uncond: 0 }, addition: { cond: 0, uncond: 0 }, new_construction: { cond: 0, uncond: 0 } };
+    (scopes || []).forEach((sc) => {
+      const t = out[sc.type] ? sc.type : 'new_construction';
+      out[t].cond   += (sc.conditionedSf || 0);
+      out[t].uncond += (sc.unconditionedSf || 0);
+    });
+    return out;
+  }
+
+  function findLine(result, lineId) {
+    for (const sect of result.sections) {
+      for (const l of sect.lines) {
+        if (l.id === lineId) return l;
+      }
+    }
+    return null;
+  }
+
+  function buildProposalHtml(result, inputs) {
+    // Arial 11pt on every element, including headings, per template request.
+    // Tight vertical rhythm to reduce white space on paste.
+    const font = 'font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 0 0 3pt 0;';
+    // Heading style resets any list indentation Google Docs tries to carry
+    // over from the preceding <ul>, plus bit more breathing room above.
+    const heading = `font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 10pt 0 3pt 0; padding-left: 0; text-indent: 0;`;
+    const cfg = ensureConfig();
+    const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const hoursWhole = (n) => Math.round(n || 0);
+
+    const projectAddress = (state.identity.projectAddress || '').trim() || '[Project Address]';
+
+    const programItems = (state.programItems || []).filter((it) => (it.text || '').trim());
+    const scopes       = state.program.scopes || [];
+    const areasByType  = summarizeAreasByType(scopes);
+    const buildGradeLabel = (window.aeConfig.BUILD_GRADE_LABELS || {})[state.program.buildGrade] || state.program.buildGrade;
+    const structComplexityLabel = (cfg.structuralComplexityLabels || { low: 'Low', medium: 'Medium', high: 'High' })[state.program.structuralComplexity] || state.program.structuralComplexity;
+
+    const effCost = result.stage1.effCost;
+    const structuralCaLine = findLine(result, 'structural_ca');
+    const structuralCaFee = (structuralCaLine && !structuralCaLine.excluded) ? structuralCaLine.effDollars : 0;
+
+    // Total design fee excludes Structural CA per template convention.
+    const totalDesignFee = result.grandTotal.dollars - (structuralCaLine && !structuralCaLine.excluded ? structuralCaLine.effDollars : 0);
+    const totalHours     = result.grandTotal.hours - (structuralCaLine && !structuralCaLine.excluded ? structuralCaLine.effHours : 0);
+
+    // ---- Fee breakdown table ----
+    // Section header row shows the section name + subtotal hours + subtotal
+    // fee. Line items below are indented. Structural CA is excluded from the
+    // table (shown separately). Hours rounded to whole numbers.
+    const feeTableHtml = (() => {
+      const rows = [];
+      result.sections.forEach((sect) => {
+        const activeLines = sect.lines.filter((l) => !l.excluded && l.effDollars > 0 && l.id !== 'structural_ca');
+        if (activeLines.length === 0) return;
+        const subtotalHours   = activeLines.reduce((s, l) => s + (l.effHours   || 0), 0);
+        const subtotalDollars = activeLines.reduce((s, l) => s + (l.effDollars || 0), 0);
+        rows.push(`<tr>
+          <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb;"><strong>${escapeHtml(sect.label)}</strong></td>
+          <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb; text-align: right;"><strong>${hoursWhole(subtotalHours)}</strong></td>
+          <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb; text-align: right;"><strong>${money(subtotalDollars)}</strong></td>
+        </tr>`);
+        activeLines.forEach((l) => {
+          rows.push(`<tr>
+            <td style="${font} padding: 0 6pt 0 18pt;">${escapeHtml(l.label)}</td>
+            <td style="${font} padding: 0 6pt; text-align: right;">${hoursWhole(l.effHours) || '—'}</td>
+            <td style="${font} padding: 0 6pt; text-align: right;">${money(l.effDollars)}</td>
+          </tr>`);
+        });
+      });
+      // Grand total row at the bottom, separated by a heavier horizontal line.
+      rows.push(`<tr>
+        <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555;"><strong>Total Design Fee</strong></td>
+        <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555; text-align: right;"><strong>${hoursWhole(totalHours)}</strong></td>
+        <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555; text-align: right;"><strong>${money(totalDesignFee)} (+/- 10%)</strong></td>
+      </tr>`);
+      return `
+        <table style="${font} border-collapse: collapse; width: 100%; margin: 3pt 0; line-height: 1.15;">
+          <thead>
+            <tr>
+              <th style="${font} text-align: left;  padding: 2pt 6pt; border-bottom: 2px solid #555;">Phase</th>
+              <th style="${font} text-align: right; padding: 2pt 6pt; border-bottom: 2px solid #555;">Hours</th>
+              <th style="${font} text-align: right; padding: 2pt 6pt; border-bottom: 2px solid #555;">Fee</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join('')}</tbody>
+        </table>`;
+    })();
+
+    // ---- Scope-of-Services line helper: description or "not in scope" ----
+    const inScope = (lineId) => {
+      const l = findLine(result, lineId);
+      return !!(l && !l.excluded && l.effDollars > 0);
+    };
+    const scopeBullet = (lineId, label, description) => {
+      return `<li style="${font}"><strong>${label}:</strong> ${inScope(lineId) ? description : 'not in scope'}</li>`;
+    };
+
+    // ---- Program bullets ----
+    const programListHtml = programItems.length === 0
+      ? `<li style="${font}">[Program Item — add in the estimator]</li>`
+      : programItems.map((it) => `<li style="${font}">${escapeHtml(it.text)}</li>`).join('');
+
+    // ---- Area assumption bullets (one line per type that has scopes) ----
+    const areaLines = [];
+    const areaLine = (label, typeKey) => {
+      const a = areasByType[typeKey];
+      if ((a.cond + a.uncond) === 0) return;
+      areaLines.push(`<li style="${font}"><strong>${label}:</strong> Approximately ${a.cond.toLocaleString()} conditioned and ${a.uncond.toLocaleString()} unconditioned square feet.</li>`);
+    };
+    areaLine('Remodeled Area', 'remodel');
+    areaLine('Addition Area', 'addition');
+    areaLine('New Construction Area', 'new_construction');
+
+    // ---- Static template content ----
+    const scopeNarrative = `
+      <h1 style="${heading}"><strong>1. PROJECT DESCRIPTION</strong></h1>
+      <p style="${font}">This project consists of design and structural engineering services for a ${escapeHtml(inputs.proposedScope || '[proposed scope]')} at ${escapeHtml(projectAddress)}. The estimate that follows is based on the program and assumptions described in this section. Material changes to either may require an adjustment to the estimated fee.</p>
+      <p style="${font}"><strong>Program</strong></p>
+      <ul style="${font}">${programListHtml}</ul>
+      <p style="${font}"><strong>Project Assumptions</strong></p>
+      <p style="${font}">The estimate assumes the following. Variations from these assumptions may affect scope, schedule, or fee.</p>
+      <ul style="${font}">
+        <li style="${font}"><strong>Construction Cost:</strong> Anticipated construction cost of approximately ${money(effCost)}, based on a build grade of ${escapeHtml(buildGradeLabel)}.</li>
+        ${areaLines.join('')}
+        <li style="${font}"><strong>Structural Complexity:</strong> ${escapeHtml(structComplexityLabel)}.</li>
+        <li style="${font}">[Additional Assumptions Here]</li>
+      </ul>
+
+      <h1 style="${heading}"><strong>2. SCOPE OF SERVICES</strong></h1>
+      <p style="${font}"><strong>Pre-Design &mdash;</strong> Establish the foundation for the project by gathering existing conditions, exploring design direction, and validating program and budget before formal design begins.</p>
+      <ul style="${font}">
+        ${scopeBullet('site_visit', 'Site / Assessment', 'On-site evaluation to document existing conditions, perform preliminary framing/foundation analysis, and capture the space via 3D scan or 360&deg; video.')}
+        ${scopeBullet('scan', '3D Scan', 'Laser scan of the existing structure or site to capture accurate spatial data. Produces a point cloud that serves as the basis for the digital base model.')}
+        ${scopeBullet('base_model', 'Base Model', '3D digital model of existing conditions developed from scan data, survey, or field measurement. Serves as the geometric starting point for design and ensures dimensional accuracy throughout the project.')}
+        ${scopeBullet('as_builts', 'As-Builts', 'Drawings of existing structures including floor plans, elevations, and key sections. Required for renovations, additions, and any work that interfaces with existing construction.')}
+        ${scopeBullet('feasibility_concept', 'Feasibility / Concept', 'Preliminary design exploration, program validation against site constraints and budget, and conceptual sketches and massing studies. Answers the question "is this project viable as imagined?" before significant design effort begins.')}
+      </ul>
+      <p style="${font}"><strong>Design &mdash;</strong> Develop the project from concept through dimensioned, coordinated drawings ready for construction documentation.</p>
+      <ul style="${font}">
+        ${scopeBullet('schematic_design', 'Schematic Design', 'Translation of the project program into a coordinated design concept. Includes preliminary site plan, floor plans, building elevations, and sections sufficient to establish overall building geometry, square footage, major spatial relationships, and general material and system selections.')}
+        ${scopeBullet('design_development', 'Design Development', 'Continued refinement of the approved Schematic Design as needed in order to generate fully coordinated construction documents. Includes revisions to the geometry, assembly decisions, preliminary structural coordination, casework layouts, material and fixture selections, etc.')}
+      </ul>
+      <p style="${font}"><strong>Construction Documents &mdash;</strong> Produce the drawings and specifications required to permit, bid, and build the project, in three sequential issuances.</p>
+      <ul style="${font}">
+        ${scopeBullet('permit_set', 'Permit-Level Set', 'Essential drawings strictly for municipal review (site, demo, floor, and roof plans; door/window schedules; basic exterior elevations).')}
+        ${scopeBullet('bid_set', 'Bid-Level Set', 'Permit Set plus detail for contractor pricing (basic interior elevations, building sections, typical assemblies, and generic power/lighting/finish layouts).')}
+        ${scopeBullet('construction_set', 'Construction-Level Set', 'Bid Set plus highly detailed build guides (exact appliance/fixture/finish specifications, material instructions, and custom assembly details).')}
+      </ul>
+      <p style="${font}"><strong>Structural Engineering &mdash;</strong> ${inScope('structural_engineering') ? "Design the project's structural system including foundation, framing, lateral systems, and connections. Includes structural drawings issued with each Construction Document set, structural calculations and code compliance documentation, and coordination of structural details with the architectural drawings and specifications." : 'not in scope'}</p>
+      <p style="${font}"><strong>Construction Phase Services &mdash;</strong> Support the project during construction in design and structural advisory roles.</p>
+      <ul style="${font}">
+        ${scopeBullet('bidding_negotiation', 'Bidding / Negotiation', 'Assistance with obtaining and evaluating contractor proposals including bid package issuance, response to contractor questions, addenda preparation, bid leveling and comparison, and recommendations to the Owner.')}
+        ${scopeBullet('permit_submittals', 'Permit Submittals', 'Preparation and submission of permit application materials to the Authority Having Jurisdiction, management of the submittal process, and coordination with permit reviewers as needed to advance the project through permit review.')}
+        ${scopeBullet('city_comment_revisions', 'City Comment Revisions', 'Response to plan review comments from the authority having jurisdiction and revisions to drawings and specifications as required to obtain permit approval. Scope depends on the comments received and is billed hourly.')}
+        ${scopeBullet('design_ca', 'Design CA', 'Design-side support during construction including periodic site observation visits, response to contractor Requests for Information (RFIs) related to design intent, review of shop drawings and submittals for conformance with the design, material and finish approvals, design clarifications and field-issued sketches, and the punch list at substantial completion. Site observations are conducted to become familiar with the progress and quality of the Work; continuous on-site inspection is not provided.')}
+        ${scopeBullet('structural_ca', 'Structural CA', 'Structural-side support during construction including site observation of structural construction at key milestones (foundation, framing), response to contractor RFIs related to structural design, review of structural shop drawings and submittals, and field clarifications of structural details.')}
+      </ul>
+    `;
+
+    const timelineHtml = `
+      <h1 style="${heading}"><strong>3. TIMELINE &amp; DELIVERABLES</strong></h1>
+      <p style="${font}">All project timelines commence upon receipt of the signed contract, retainer payment, and necessary client-provided site data (e.g., survey, soils report).</p>
+      <p style="${font}"><strong>Pre-Design:</strong></p>
+      <ul style="${font}">
+        <li style="${font}"><strong>Deliverables:</strong> Feasibility / Zoning Analysis, Concept sketches / Massing options</li>
+        <li style="${font}"><strong>Approximate Duration:</strong> ${inputs.pdWks} weeks</li>
+      </ul>
+      <p style="${font}"><strong>Schematic Design:</strong></p>
+      <ul style="${font}">
+        <li style="${font}"><strong>Deliverables:</strong> Schematic Approval Set</li>
+        <li style="${font}"><strong>Approximate Duration:</strong> ${inputs.sdWks} weeks (depending on iterations)</li>
+        <li style="${font}">*Client approval at this stage establishes the "Design Freeze."</li>
+      </ul>
+      <p style="${font}"><strong>Design Development / Construction Documents:</strong> Creation of a detailed set of drawings required for permitting, bidding, and construction.</p>
+      <ul style="${font}">
+        <li style="${font}"><strong>Deliverables (after Design Freeze):</strong></li>
+      </ul>
+      <ul style="${font}">
+        <li style="${font} margin-left: 22px;">Permit Set &ndash; ${inputs.permitWks} weeks</li>
+        <li style="${font} margin-left: 22px;">Structural Set &ndash; ${inputs.seWks} weeks</li>
+        <li style="${font} margin-left: 22px;">Bid Set &ndash; ${inputs.bidWks} weeks</li>
+        <li style="${font} margin-left: 22px;">Construction Set &ndash; ${inputs.cdWks} weeks</li>
+      </ul>
+      <p style="${font}"><strong>Construction Phase Services:</strong></p>
+      <ul style="${font}">
+        <li style="${font}"><strong>Deliverables:</strong> RFI responses, field observation reports, and certification letters if compliant.</li>
+        <li style="${font}"><strong>Due Date:</strong> Ongoing through substantial completion.</li>
+      </ul>
+    `;
+
+    const compensationHtml = `
+      <h1 style="${heading}"><strong>4. COMPENSATION</strong></h1>
+      <p style="${font}">The following estimates are based on an anticipated effort to complete each service, based on the scope defined in earlier sections, and a blended hourly rate.</p>
+      ${feeTableHtml}
+      <p style="${font} margin-left: 30px; margin-right: 30px;"><strong>Note:</strong> Okkem Design typically completes projects of this type within approximately 10% of the estimated fee. Should projected fees exceed this threshold due to scope changes or unforeseen conditions, we will notify the Client and provide a revised estimate for approval.</p>
+      <p style="${font}"><strong>Structural CA</strong> is provided as a separate service. Based on the current scope&mdash;which includes wood framing, concrete footings/piers, limited steel hardware, and two required structural inspections&mdash;Okkem Design anticipates a Structural CA budget of <strong>${structuralCaFee > 0 ? money(structuralCaFee) : '[not included]'}</strong>.</p>
+      <p style="${font}">This CA fee will be confirmed in a separate communication issued after the completion of the Structural Design phase.</p>
+      <p style="${font}"><strong>Hourly Rate Schedule</strong></p>
+      <ul style="${font}">
+        <li style="${font}">Licensed Design Professional: $190/hr</li>
+        <li style="${font}">Project Coordination: $160/hr</li>
+        <li style="${font}">Non-Licensed Staff: $130/hr</li>
+      </ul>
+    `;
+
+    const retainerHtml = (inputs.retainer && inputs.retainer > 0)
+      ? `<strong>${money(inputs.retainer)}</strong>`
+      : '<strong>[Retainer Amount]</strong>';
+    const paymentHtml = `
+      <h1 style="${heading}"><strong>5. PAYMENT TERMS</strong></h1>
+      <ul style="${font}">
+        <li style="${font}"><strong>Retainer:</strong> A ${retainerHtml} retainer is required to initiate services. The retainer will be applied to the final invoice. Any unused balance will be refunded at project completion.</li>
+        <li style="${font}"><strong>Invoicing:</strong> Invoices are typically issued when accumulated fees exceed $2,000, upon delivery of a major milestone, or prior to a project pause.</li>
+        <li style="${font}"><strong>Terms:</strong> Payment is due within 7 days of invoice issuance. Unpaid invoices may result in a pause in services. All outstanding invoices must be paid in full prior to release of the final sealed drawings.</li>
+      </ul>
+    `;
+
+    const assumptionsHtml = `
+      <h1 style="${heading}"><strong>6. ASSUMPTIONS &amp; EXCLUSIONS</strong></h1>
+      <p style="${font}">Because Okkem Design is executing both the visual design and the structural engineering, the project requires strict adherence to phase approvals to prevent costly rework.</p>
+      <ul style="${font}">
+        <li style="${font}"><strong>The "Design Freeze" and Rework:</strong> Once the Client formally approves the layout, the spatial geometry is considered frozen. Any subsequent client-initiated changes to rooflines, footprints, wall locations, or window/door sizes will require engineering rework and will be billed hourly in addition to the estimated fees.</li>
+        <li style="${font}"><strong>Third-Party Data:</strong> Our structural engineering calculations assume the accuracy of the boundary/topographic survey and the Geotechnical (soils) report provided directly by the Client. We hold no liability for structural issues arising from inaccurate third-party site data.</li>
+        <li style="${font}"><strong>Excluded Engineering Disciplines:</strong> Mechanical, Electrical, Plumbing (MEP), and Civil Engineering (e.g., grading, drainage, stormwater management) are explicitly excluded and must be provided by separate consultants contracted directly by the Client.</li>
+        <li style="${font}"><strong>Interior Decor and Finishes:</strong> Unless explicitly listed in the scope, the selection and specification of interior decor, paint colors, fixtures, and non-structural cabinetry are excluded.</li>
+        <li style="${font}"><strong>Means and Methods:</strong> Okkem Design is not responsible for construction safety, sequencing, or the builder's means and methods on the job site.</li>
+        <li style="${font}"><strong>Reimbursable Expenses:</strong> Municipal permitting fees, specialty printing, and required courier services are not included in the fee estimate and will be billed at cost plus a standard 10% administrative markup.</li>
+        <li style="${font}"><strong>Connections:</strong> Unless specifically detailed in the architectural drawings, connections use standard, commercially available hardware with published load data; custom/architectural connection design is excluded.</li>
+        <li style="${font}"><strong>Guardrails:</strong> Guardrail systems are assumed to be prescriptive or manufacturer-engineered; Okkem Design will design only the supporting framing and blocking.</li>
+        <li style="${font}"><strong>Site Access:</strong> Site access must allow standard visual observation without special equipment or confined-space requirements.</li>
+        <li style="${font}"><strong>Reimbursable Expenses:</strong> Expenses such as municipal fees or specialty tools will be billed at cost with Client approval.</li>
+        <li style="${font}"><strong>Specific Exclusions:</strong> [List additional Exclusions as needed]</li>
+      </ul>
+    `;
+
+    return `<div style="${font} color: #000; line-height: 1.2;">
+      ${scopeNarrative}
+      ${timelineHtml}
+      ${compensationHtml}
+      ${paymentHtml}
+      ${assumptionsHtml}
+      ${inputs.yourName ? `<p style="${font} margin-top: 12pt;">${escapeHtml(inputs.yourName)}</p>` : ''}
+    </div>`;
+  }
+
   function saveForm() {
     // All edits commit on change; nothing pending here.
   }
@@ -1164,7 +1610,7 @@
     render,
     saveForm,
     getState: () => state,
-    getProjectName: () => state.identity.projectName || '',
+    getProjectName: () => state.identity.projectAddress || '',
     setState: (newState) => {
       state = Object.assign(makeInitialState(), newState || {});
       // Backfill nested structure to keep render() safe against older shapes.
@@ -1181,16 +1627,26 @@
       if (state.manualHours) delete state.manualHours.feasibility;
       if (state.lineOverrides) delete state.lineOverrides.feasibility;
       if (state.lineExclusions) delete state.lineExclusions.feasibility;
-      // Migrate older saves: flat sf/spaces fields → single Scope 1.
+      // Migrate older saves: flat sf/spaces fields → single Area 1.
       if (!Array.isArray(state.program.scopes) || state.program.scopes.length === 0) {
         state.program.scopes = [makeScope(
-          'Scope 1',
+          'Area 1',
           state.program.conditionedSf || 0,
           state.program.conditionedSpaces || 0,
           state.program.unconditionedSf || 0,
           state.program.unconditionedSpaces || 0
         )];
       }
+      state.program.scopes = normalizeScopes(state.program.scopes);
+      // Drop legacy projectType field (UI removed).
+      if (state.identity) delete state.identity.projectType;
+      // Migrate legacy projectName into projectAddress.
+      if (state.identity && state.identity.projectName && !state.identity.projectAddress) {
+        state.identity.projectAddress = state.identity.projectName;
+      }
+      if (state.identity) delete state.identity.projectName;
+      // Backfill programItems (narrative list).
+      if (!Array.isArray(state.programItems)) state.programItems = [];
       // Drop legacy top-level fields so they can't drift out of sync.
       delete state.program.conditionedSf;
       delete state.program.conditionedSpaces;
@@ -1227,12 +1683,13 @@
   function extractPerProjectState(s) {
     return {
       identity: s.identity || {},
+      programItems: s.programItems || [],
       stage1Overrides: s.stage1Overrides || {},
       activeFlags: (s.stage2 && s.stage2.activeFlags) || [],
       manualHours: s.manualHours || {},
       additionalServices: s.additionalServices || [],
       lineOverrides: s.lineOverrides || {},
-      lineExclusions: s.lineExclusions || {},
+      // lineExclusions is now default-able, not per-project.
     };
   }
 
@@ -1249,7 +1706,18 @@
   function programDefaultsAreDrifted() {
     const saved = window.aeConfig.loadProgramDefaults();
     const baseline = saved ? Object.assign(shippedProgramDefaults(), saved) : shippedProgramDefaults();
-    return JSON.stringify(extractProgramDefaults(state.program)) !== JSON.stringify(extractProgramDefaults(baseline));
+    // Compare current defaults-shaped values against the saved baseline.
+    const current = extractProgramDefaults(state);
+    const baselineShaped = {
+      scopes: baseline.scopes || [],
+      buildGrade: baseline.buildGrade,
+      structuralComplexity: baseline.structuralComplexity,
+      buildingCategory: baseline.buildingCategory,
+      projectComplexity: baseline.projectComplexity,
+      regionalMultiplier: baseline.regionalMultiplier,
+      lineExclusions: baseline.lineExclusions || {},
+    };
+    return JSON.stringify(current) !== JSON.stringify(baselineShaped);
   }
 
   function hasUnsavedWork() {
