@@ -1240,6 +1240,33 @@
     const existing = document.getElementById('aeProposalModal');
     if (existing) existing.remove();
 
+    // Duration defaults are computed from the current estimate's hours so
+    // the weeks on the proposal scale with the work.
+    const cfg = ensureConfig();
+    const result = calculate(state, cfg);
+    const lineHrs = (id) => {
+      const l = findLine(result, id);
+      return (l && !l.excluded) ? (l.effHours || 0) : 0;
+    };
+    const preDesignHrs   = lineHrs('site_visit') + lineHrs('scan') + lineHrs('base_model') + lineHrs('as_builts') + lineHrs('feasibility_concept');
+    const sdHrs          = lineHrs('schematic_design');
+    const ddHrs          = lineHrs('design_development');
+    const permitHrs      = lineHrs('permit_set');
+    const bidHrs         = lineHrs('bid_set');
+    const constructionHrs = lineHrs('construction_set');
+    const structHrs      = lineHrs('structural_engineering');
+    const ceilDiv = (num, den) => (num > 0 && den > 0) ? Math.ceil(num / den) : 0;
+    const pdDefault     = ceilDiv(preDesignHrs, 20);
+    const sdWeeksRaw    = ceilDiv(sdHrs, 20);
+    // Schematic Design: round-up weeks, then insert a week between each
+    // (n + (n-1) = 2n - 1).
+    const sdDefault     = sdWeeksRaw > 0 ? 2 * sdWeeksRaw - 1 : 0;
+    const permitDefault = ceilDiv(permitHrs, 25);
+    const seDefault     = ceilDiv(structHrs, 20);
+    // Bid / Construction sets absorb a portion of DD hours.
+    const bidDefault    = ceilDiv(bidHrs + 0.25 * ddHrs, 20);
+    const cdDefault     = ceilDiv(constructionHrs + 0.50 * ddHrs, 20);
+
     const modal = document.createElement('div');
     modal.id = 'aeProposalModal';
     modal.className = 'modal-overlay';
@@ -1256,23 +1283,25 @@
           </div>
           <h3 style="margin-top:0.75rem;">Durations (weeks)</h3>
           <div class="form-row">
-            <div class="form-group"><label for="aePropPdWks">Pre-Design</label><input type="number" id="aePropPdWks" min="0" step="1" value="2"></div>
-            <div class="form-group"><label for="aePropSdWks">Schematic Design</label><input type="number" id="aePropSdWks" min="0" step="1" value="3"></div>
-            <div class="form-group"><label for="aePropPermitWks">Permit Set</label><input type="number" id="aePropPermitWks" min="0" step="1" value="4"></div>
+            <div class="form-group"><label for="aePropPdWks">Pre-Design</label><input type="number" id="aePropPdWks" min="0" step="1" value="${pdDefault}"></div>
+            <div class="form-group"><label for="aePropSdWks">Schematic Design</label><input type="number" id="aePropSdWks" min="0" step="1" value="${sdDefault}"></div>
+            <div class="form-group"><label for="aePropPermitWks">Permit Set</label><input type="number" id="aePropPermitWks" min="0" step="1" value="${permitDefault}"></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label for="aePropSeWks">Structural</label><input type="number" id="aePropSeWks" min="0" step="1" value="2"></div>
-            <div class="form-group"><label for="aePropBidWks">Bid Set</label><input type="number" id="aePropBidWks" min="0" step="1" value="2"></div>
-            <div class="form-group"><label for="aePropCdWks">Construction Set</label><input type="number" id="aePropCdWks" min="0" step="1" value="3"></div>
+            <div class="form-group"><label for="aePropSeWks">Structural</label><input type="number" id="aePropSeWks" min="0" step="1" value="${seDefault}"></div>
+            <div class="form-group"><label for="aePropBidWks">Bid Set</label><input type="number" id="aePropBidWks" min="0" step="1" value="${bidDefault}"></div>
+            <div class="form-group"><label for="aePropCdWks">Construction Set</label><input type="number" id="aePropCdWks" min="0" step="1" value="${cdDefault}"></div>
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:1">
               <label for="aePropRetainer">Retainer amount ($)</label>
-              <input type="number" id="aePropRetainer" min="0" step="100" placeholder="e.g. 5000">
+              <input type="number" id="aePropRetainer" min="0" step="100" value="5000">
             </div>
-            <div class="form-group" style="flex:1">
-              <label for="aePropYourName">Your name / firm signature</label>
-              <input type="text" id="aePropYourName" placeholder="e.g. Chris Okkem, Okkem Design">
+            <div class="form-group" style="flex:1; align-self:flex-end;">
+              <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal;">
+                <input type="checkbox" id="aePropRoundHours" checked>
+                Round hours to whole numbers
+              </label>
             </div>
           </div>
         </div>
@@ -1294,7 +1323,7 @@
         bidWks:         parseInt(document.getElementById('aePropBidWks').value) || 0,
         cdWks:          parseInt(document.getElementById('aePropCdWks').value) || 0,
         retainer:       parseFloat(document.getElementById('aePropRetainer').value) || 0,
-        yourName:       document.getElementById('aePropYourName').value || '',
+        roundHours:     document.getElementById('aePropRoundHours').checked,
       };
       modal.remove();
       showProposalPreview(inputs);
@@ -1384,7 +1413,11 @@
     const heading = `font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 10pt 0 3pt 0; padding-left: 0; text-indent: 0;`;
     const cfg = ensureConfig();
     const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
-    const hoursWhole = (n) => Math.round(n || 0);
+    const roundHours = inputs.roundHours !== false; // default true
+    const formatHours = (n) => {
+      const v = n || 0;
+      return roundHours ? Math.round(v) : Math.round(v * 10) / 10;
+    };
 
     const projectAddress = (state.identity.projectAddress || '').trim() || '[Project Address]';
 
@@ -1415,13 +1448,13 @@
         const subtotalDollars = activeLines.reduce((s, l) => s + (l.effDollars || 0), 0);
         rows.push(`<tr>
           <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb;"><strong>${escapeHtml(sect.label)}</strong></td>
-          <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb; text-align: right;"><strong>${hoursWhole(subtotalHours)}</strong></td>
+          <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb; text-align: right;"><strong>${formatHours(subtotalHours)}</strong></td>
           <td style="${font} padding: 4pt 6pt 1pt 6pt; border-top: 1px solid #bbb; text-align: right;"><strong>${money(subtotalDollars)}</strong></td>
         </tr>`);
         activeLines.forEach((l) => {
           rows.push(`<tr>
             <td style="${font} padding: 0 6pt 0 18pt;">${escapeHtml(l.label)}</td>
-            <td style="${font} padding: 0 6pt; text-align: right;">${hoursWhole(l.effHours) || '—'}</td>
+            <td style="${font} padding: 0 6pt; text-align: right;">${formatHours(l.effHours) || '—'}</td>
             <td style="${font} padding: 0 6pt; text-align: right;">${money(l.effDollars)}</td>
           </tr>`);
         });
@@ -1429,7 +1462,7 @@
       // Grand total row at the bottom, separated by a heavier horizontal line.
       rows.push(`<tr>
         <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555;"><strong>Total Design Fee</strong></td>
-        <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555; text-align: right;"><strong>${hoursWhole(totalHours)}</strong></td>
+        <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555; text-align: right;"><strong>${formatHours(totalHours)}</strong></td>
         <td style="${font} padding: 6pt 6pt 2pt 6pt; border-top: 2px solid #555; text-align: right;"><strong>${money(totalDesignFee)} (+/- 10%)</strong></td>
       </tr>`);
       return `
@@ -1473,11 +1506,10 @@
     // ---- Static template content ----
     const scopeNarrative = `
       <h1 style="${heading}"><strong>1. PROJECT DESCRIPTION</strong></h1>
-      <p style="${font}">This project consists of design and structural engineering services for a ${escapeHtml(inputs.proposedScope || '[proposed scope]')} at ${escapeHtml(projectAddress)}. The estimate that follows is based on the program and assumptions described in this section. Material changes to either may require an adjustment to the estimated fee.</p>
+      <p style="${font}">This project consists of design and structural engineering services for a ${escapeHtml(inputs.proposedScope || '[proposed scope]')} at ${escapeHtml(projectAddress)}. The estimate that follows is based on the program and assumptions described in this section. Material changes to either may require an adjustment to the estimated fee and schedule.</p>
       <p style="${font}"><strong>Program</strong></p>
       <ul style="${font}">${programListHtml}</ul>
       <p style="${font}"><strong>Project Assumptions</strong></p>
-      <p style="${font}">The estimate assumes the following. Variations from these assumptions may affect scope, schedule, or fee.</p>
       <ul style="${font}">
         <li style="${font}"><strong>Build Grade:</strong> ${escapeHtml(buildGradeLabel)}</li>
         ${areaLines.join('')}
@@ -1552,8 +1584,8 @@
       <p style="${font}">The following estimates are based on an anticipated effort to complete each service, based on the scope defined in earlier sections, and a blended hourly rate.</p>
       ${feeTableHtml}
       <p style="${font} margin-left: 30px; margin-right: 30px;"><strong>Note:</strong> Okkem Design typically completes projects of this type within approximately 10% of the estimated fee. Should projected fees exceed this threshold due to scope changes or unforeseen conditions, we will notify the Client and provide a revised estimate for approval.</p>
-      <p style="${font}"><strong>Structural CA</strong> is provided as a separate service. Based on the current scope&mdash;which includes wood framing, concrete footings/piers, limited steel hardware, and two required structural inspections&mdash;Okkem Design anticipates a Structural CA budget of <strong>${structuralCaFee > 0 ? money(structuralCaFee) : '[not included]'}</strong>.</p>
-      <p style="${font}">This CA fee will be confirmed in a separate communication issued after the completion of the Structural Design phase.</p>
+      <p style="${font}"><strong>Structural Construction Phase Services:</strong> Based on the current scope and assumptions, Okkem Design anticipates a Structural "Construction Phase" fee of <strong>${structuralCaFee > 0 ? money(structuralCaFee) : '[Structural CA Fee]'}</strong>.</p>
+      <p style="${font}">This fee will be confirmed in a separate communication issued after the completion of the Structural Design phase.</p>
       <p style="${font}"><strong>Hourly Rate Schedule</strong></p>
       <ul style="${font}">
         <li style="${font}">Licensed Design Professional: $190/hr</li>
@@ -1598,7 +1630,6 @@
       ${compensationHtml}
       ${paymentHtml}
       ${assumptionsHtml}
-      ${inputs.yourName ? `<p style="${font} margin-top: 12pt;">${escapeHtml(inputs.yourName)}</p>` : ''}
     </div>`;
   }
 

@@ -3,12 +3,54 @@
 (function () {
   const app = document.getElementById('app');
 
+  const DESIGN_STABILITY_OPTIONS = [
+    { value: 'locked',        label: 'Locked (engineer only)' },
+    { value: 'mostly_locked', label: 'Mostly Locked (minor coordination)' },
+    { value: 'fluid',         label: 'Fluid (early design assist)' },
+  ];
+  const STRUCTURAL_SYSTEM_OPTIONS = [
+    { value: 'wood_framing',   label: 'Light-frame wood' },
+    { value: 'wood_steel',     label: 'Light-frame wood + structural steel' },
+    { value: 'cfs_steel',      label: 'Cold-formed steel + structural steel' },
+    { value: 'steel_cfs',      label: 'Structural steel + cold-formed steel' },
+    { value: 'masonry',        label: 'Masonry (CMU)' },
+    { value: 'icf',            label: 'Insulated concrete forms (ICF)' },
+    { value: 'cast_in_place',  label: 'Cast-in-place concrete' },
+    { value: 'tilt_up',        label: 'Tilt-up concrete' },
+    { value: 'hybrid_other',   label: 'Hybrid / other' },
+  ];
+  const FOUNDATION_TYPE_OPTIONS = [
+    { value: 'slab_on_grade',  label: 'Slab-on-grade' },
+    { value: 'post_tensioned', label: 'Post-tensioned slab' },
+    { value: 'pier_beam',      label: 'Pier and beam' },
+    { value: 'drilled_piers',  label: 'Drilled piers + grade beams' },
+    { value: 'helical_piers',  label: 'Helical piers' },
+    { value: 'basement',       label: 'Basement' },
+    { value: 'mat_slab',       label: 'Mat slab' },
+    { value: 'other',          label: 'Other' },
+  ];
+  const GEOTECH_REPORT_OPTIONS = [
+    { value: 'provided',            label: 'Provided' },
+    { value: 'waived_nonexpansive', label: 'Waived (non-expansive assumed)' },
+    { value: 'to_be_provided',      label: 'To be provided' },
+  ];
+
+  let structureScopeIdCounter = 0;
+  const nextStructureScopeId = () => 'ss_' + (++structureScopeIdCounter) + '_' + Date.now();
+
   let state = makeInitialState();
 
   function makeInitialState() {
     return {
-      projectName: '',
-      notes: '',
+      projectAddress: '',
+      clientName: '',
+      structuresScope: [],
+      assumptions: {
+        designStability: 'mostly_locked',
+        structuralSystem: 'wood_framing',
+        foundationType: 'slab_on_grade',
+        geotechReport: 'to_be_provided',
+      },
       stories: 1,
       squareFootage: 0,
       cornerOutlines: {},
@@ -78,18 +120,62 @@
           <button class="btn btn-secondary" id="btnImport">Import Estimate</button>
         </div>
 
-        <!-- Project Name -->
+        <!-- Project -->
         <div class="form-section">
           <div class="form-row">
             <div class="form-group" style="flex: 1;">
-              <label for="projectName">Project Name</label>
-              <input type="text" id="projectName" placeholder="e.g. Smith Residence" value="${state.projectName || ''}">
+              <label for="projectAddress">Project Address</label>
+              <input type="text" id="projectAddress" placeholder="e.g. 123 Main St" value="${escapeAttr(state.projectAddress)}">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="clientName">Client Name</label>
+              <input type="text" id="clientName" placeholder="e.g. Smith Residence" value="${escapeAttr(state.clientName)}">
+            </div>
+          </div>
+
+          <h3 style="margin-top:1rem;">Structures &amp; Scope</h3>
+          <p class="help-text">List each structure and the engineering scope it covers. Each item becomes a bullet in the proposal.</p>
+          <div id="structuresScopeList">
+            ${(state.structuresScope || []).map((item, idx) => `
+              <div class="form-row structures-scope-row" data-idx="${idx}">
+                <div class="form-group" style="flex:1">
+                  <input type="text" class="structures-scope-input" data-idx="${idx}" placeholder="e.g. Main residence — foundation, framing, lateral" value="${escapeAttr(item.text || '')}">
+                </div>
+                <div class="form-group" style="flex:0; align-self:flex-end;">
+                  <button class="btn-remove-structure" data-idx="${idx}" title="Remove">&times;</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn-small" id="btnAddStructure">+ Add Item</button>
+
+          <h3 style="margin-top:1rem;">Project Assumptions</h3>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label for="designStability">Design Stability</label>
+              <select id="designStability">
+                ${DESIGN_STABILITY_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.designStability === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label for="structuralSystem">Structural System</label>
+              <select id="structuralSystem">
+                ${STRUCTURAL_SYSTEM_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.structuralSystem === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
             </div>
           </div>
           <div class="form-row">
-            <div class="form-group" style="flex: 1;">
-              <label for="notes">Notes</label>
-              <textarea id="notes" rows="3" placeholder="Additional notes...">${state.notes || ''}</textarea>
+            <div class="form-group" style="flex:1">
+              <label for="foundationType">Foundation Type</label>
+              <select id="foundationType">
+                ${FOUNDATION_TYPE_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.foundationType === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label for="geotechReport">Geotechnical Report</label>
+              <select id="geotechReport">
+                ${GEOTECH_REPORT_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.geotechReport === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
             </div>
           </div>
         </div>
@@ -358,6 +444,24 @@
   }
 
   function bindFormEvents() {
+    const btnAddStructure = document.getElementById('btnAddStructure');
+    if (btnAddStructure) {
+      btnAddStructure.addEventListener('click', () => {
+        readFormIntoState();
+        state.structuresScope.push({ id: nextStructureScopeId(), text: '' });
+        rebuildForm();
+      });
+    }
+
+    document.querySelectorAll('.btn-remove-structure').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        readFormIntoState();
+        const idx = parseInt(btn.dataset.idx);
+        state.structuresScope.splice(idx, 1);
+        rebuildForm();
+      });
+    });
+
     document.getElementById('stories').addEventListener('change', (e) => {
       readFormIntoState();
       state.stories = parseInt(e.target.value);
@@ -465,7 +569,7 @@
   // ---------- Export / Import (per-tool, v3 envelope) ----------
 
   async function exportProject() {
-    const name = state.projectName || 'Untitled Project';
+    const name = state.projectAddress || state.clientName || 'Untitled Project';
     const safeName = name.replace(/[^a-zA-Z0-9 _\-]/g, '');
     const wrapper = {
       version: 3,
@@ -530,7 +634,7 @@
             alert('This file does not appear to be a valid SE estimate.');
             return;
           }
-          state = imported;
+          state = migrateImportedState(imported);
           initCornerOutlines();
           rebuildForm();
         } catch (e) {
@@ -543,8 +647,29 @@
   }
 
   function readFormIntoState() {
-    state.projectName = document.getElementById('projectName').value || '';
-    state.notes = document.getElementById('notes').value || '';
+    const addrEl = document.getElementById('projectAddress');
+    const clientEl = document.getElementById('clientName');
+    if (addrEl) state.projectAddress = addrEl.value || '';
+    if (clientEl) state.clientName = clientEl.value || '';
+
+    if (!Array.isArray(state.structuresScope)) state.structuresScope = [];
+    document.querySelectorAll('.structures-scope-input').forEach((input) => {
+      const idx = parseInt(input.dataset.idx);
+      if (state.structuresScope[idx]) {
+        state.structuresScope[idx].text = input.value || '';
+      }
+    });
+
+    if (!state.assumptions) state.assumptions = {};
+    const designStabilityEl  = document.getElementById('designStability');
+    const structuralSystemEl = document.getElementById('structuralSystem');
+    const foundationTypeEl   = document.getElementById('foundationType');
+    const geotechReportEl    = document.getElementById('geotechReport');
+    if (designStabilityEl)  state.assumptions.designStability  = designStabilityEl.value;
+    if (structuralSystemEl) state.assumptions.structuralSystem = structuralSystemEl.value;
+    if (foundationTypeEl)   state.assumptions.foundationType   = foundationTypeEl.value;
+    if (geotechReportEl)    state.assumptions.geotechReport    = geotechReportEl.value;
+
     state.stories = parseInt(document.getElementById('stories').value) || 1;
 
     document.querySelectorAll('.corner-input').forEach((input) => {
@@ -790,6 +915,33 @@
   function intOrZero(val) {
     const n = parseInt(val);
     return isNaN(n) ? 0 : n;
+  }
+
+  function escapeAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // Migrates older saved states: legacy `projectName` becomes `projectAddress`,
+  // legacy `notes` seeds the first Structures & Scope item, and missing
+  // assumption fields are backfilled with defaults.
+  function migrateImportedState(incoming) {
+    const base = makeInitialState();
+    const merged = Object.assign({}, base, incoming || {});
+    if (!merged.projectAddress && incoming && incoming.projectName) {
+      merged.projectAddress = incoming.projectName;
+    }
+    delete merged.projectName;
+    if (!Array.isArray(merged.structuresScope)) merged.structuresScope = [];
+    if (merged.structuresScope.length === 0 && incoming && incoming.notes) {
+      merged.structuresScope.push({ id: nextStructureScopeId(), text: incoming.notes });
+    }
+    delete merged.notes;
+    merged.assumptions = Object.assign({}, base.assumptions, merged.assumptions || {});
+    return merged;
   }
 
   function formatNum(n) {
@@ -1044,7 +1196,7 @@
   }
 
   function saveForm() {
-    if (document.getElementById('projectName')) readFormIntoState();
+    if (document.getElementById('projectAddress')) readFormIntoState();
   }
 
   // Expose public API (kept for diagnostics; page initializes itself below).
@@ -1052,9 +1204,9 @@
     render,
     saveForm,
     getState: () => state,
-    getProjectName: () => state.projectName || '',
+    getProjectName: () => state.projectAddress || state.clientName || '',
     setState: (newState) => {
-      state = newState;
+      state = migrateImportedState(newState);
       initCornerOutlines();
       rebuildForm();
     },
