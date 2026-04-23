@@ -1368,32 +1368,19 @@
     const existing = document.getElementById('aeProposalModal');
     if (existing) existing.remove();
 
-    // Duration defaults are computed from the current estimate's hours so
-    // the weeks on the proposal scale with the work.
-    const cfg = ensureConfig();
-    const result = calculate(state, cfg);
-    const lineHrs = (id) => {
-      const l = findLine(result, id);
-      return (l && !l.excluded) ? (l.effHours || 0) : 0;
-    };
-    const preDesignHrs   = lineHrs('site_visit') + lineHrs('scan') + lineHrs('base_model') + lineHrs('as_builts') + lineHrs('feasibility_concept');
-    const sdHrs          = lineHrs('schematic_design');
-    const ddHrs          = lineHrs('design_development');
-    const permitHrs      = lineHrs('permit_set');
-    const bidHrs         = lineHrs('bid_set');
-    const constructionHrs = lineHrs('construction_set');
-    const structHrs      = lineHrs('structural_engineering');
-    const ceilDiv = (num, den) => (num > 0 && den > 0) ? Math.ceil(num / den) : 0;
-    const pdDefault     = ceilDiv(preDesignHrs, 20);
-    const sdWeeksRaw    = ceilDiv(sdHrs, 20);
-    // Schematic Design: round-up weeks, then insert a week between each
-    // (n + (n-1) = 2n - 1).
-    const sdDefault     = sdWeeksRaw > 0 ? 2 * sdWeeksRaw - 1 : 0;
-    const permitDefault = ceilDiv(permitHrs, 25);
-    const seDefault     = ceilDiv(structHrs, 20);
-    // Bid / Construction sets absorb a portion of DD hours.
-    const bidDefault    = ceilDiv(bidHrs + 0.25 * ddHrs, 20);
-    const cdDefault     = ceilDiv(constructionHrs + 0.50 * ddHrs, 20);
+    // Fixed week defaults per Chris's proposal convention. If Bid Set or
+    // Construction Set is excluded on the estimate, the corresponding
+    // duration renders as "NA" rather than a number.
+    const exc = state.lineExclusions || {};
+    const bidExcluded = !!exc['bid_set'];
+    const cdExcluded  = !!exc['construction_set'];
+
+    const pdDefault     = 2;
+    const sdDefault     = 3;
+    const permitDefault = 2;
+    const seDefault     = 2;
+    const bidDefault    = bidExcluded ? 'NA' : 4;
+    const cdDefault     = cdExcluded  ? 'NA' : 6;
 
     const modal = document.createElement('div');
     modal.id = 'aeProposalModal';
@@ -1417,8 +1404,12 @@
           </div>
           <div class="form-row">
             <div class="form-group"><label for="aePropSeWks">Structural</label><input type="number" id="aePropSeWks" min="0" step="1" value="${seDefault}"></div>
-            <div class="form-group"><label for="aePropBidWks">Bid Set</label><input type="number" id="aePropBidWks" min="0" step="1" value="${bidDefault}"></div>
-            <div class="form-group"><label for="aePropCdWks">Construction Set</label><input type="number" id="aePropCdWks" min="0" step="1" value="${cdDefault}"></div>
+            <div class="form-group"><label for="aePropBidWks">Bid Set${bidExcluded ? ' (excluded)' : ''}</label>${bidExcluded
+              ? `<input type="text" id="aePropBidWks" value="NA" readonly style="background:#f1f5f9; color:#64748b;">`
+              : `<input type="number" id="aePropBidWks" min="0" step="1" value="${bidDefault}">`}</div>
+            <div class="form-group"><label for="aePropCdWks">Construction Set${cdExcluded ? ' (excluded)' : ''}</label>${cdExcluded
+              ? `<input type="text" id="aePropCdWks" value="NA" readonly style="background:#f1f5f9; color:#64748b;">`
+              : `<input type="number" id="aePropCdWks" min="0" step="1" value="${cdDefault}">`}</div>
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:1">
@@ -1442,14 +1433,25 @@
     document.body.appendChild(modal);
     document.getElementById('aePropCancel').addEventListener('click', () => modal.remove());
     document.getElementById('aePropGenerate').addEventListener('click', () => {
+      // For Bid Set / Construction Set, the field is a readonly text
+      // "NA" when the line is excluded. Send null in that case so the
+      // proposal renderer knows to emit "NA".
+      const readWks = (id, allowNa) => {
+        const el = document.getElementById(id);
+        if (!el) return 0;
+        const raw = (el.value || '').trim();
+        if (allowNa && raw.toUpperCase() === 'NA') return null;
+        const n = parseInt(raw);
+        return isNaN(n) ? 0 : n;
+      };
       const inputs = {
         proposedScope:  document.getElementById('aePropProposedScope').value || '',
-        pdWks:          parseInt(document.getElementById('aePropPdWks').value) || 0,
-        sdWks:          parseInt(document.getElementById('aePropSdWks').value) || 0,
-        permitWks:      parseInt(document.getElementById('aePropPermitWks').value) || 0,
-        seWks:          parseInt(document.getElementById('aePropSeWks').value) || 0,
-        bidWks:         parseInt(document.getElementById('aePropBidWks').value) || 0,
-        cdWks:          parseInt(document.getElementById('aePropCdWks').value) || 0,
+        pdWks:          readWks('aePropPdWks', false),
+        sdWks:          readWks('aePropSdWks', false),
+        permitWks:      readWks('aePropPermitWks', false),
+        seWks:          readWks('aePropSeWks', false),
+        bidWks:         readWks('aePropBidWks', true),
+        cdWks:          readWks('aePropCdWks', true),
         retainer:       parseFloat(document.getElementById('aePropRetainer').value) || 0,
         roundHours:     document.getElementById('aePropRoundHours').checked,
       };
@@ -1696,8 +1698,8 @@
       <ul style="${font}">
         <li style="${font} margin-left: 22px;">Permit Set &ndash; ${inputs.permitWks} weeks</li>
         <li style="${font} margin-left: 22px;">Structural Set &ndash; ${inputs.seWks} weeks</li>
-        <li style="${font} margin-left: 22px;">Bid Set &ndash; ${inputs.bidWks} weeks</li>
-        <li style="${font} margin-left: 22px;">Construction Set &ndash; ${inputs.cdWks} weeks</li>
+        <li style="${font} margin-left: 22px;">Bid Set &ndash; ${inputs.bidWks == null ? 'NA' : inputs.bidWks + ' weeks'}</li>
+        <li style="${font} margin-left: 22px;">Construction Set &ndash; ${inputs.cdWks == null ? 'NA' : inputs.cdWks + ' weeks'}</li>
       </ul>
       <p style="${font}"><strong>Construction Phase Services:</strong></p>
       <ul style="${font}">
