@@ -290,6 +290,50 @@ main {
   padding-top: 0.75rem;
 }
 
+/* Fee Estimate (line items) table */
+.li-fee-table {
+  margin-top: 1.5rem;
+}
+.li-fee-table .li-include {
+  width: 2.5rem;
+  text-align: center;
+}
+.li-fee-table .li-phase-header td {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+  border-top: 2px solid #e2e8f0;
+}
+.li-fee-table .li-phase-subtotal td {
+  background: #fafbfc;
+  font-size: 0.85rem;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+.li-fee-table .li-grand-total td {
+  border-top: 2px solid #475569;
+  background: #f1f5f9;
+  font-size: 0.95rem;
+}
+.li-fee-table .li-row.li-excluded td:not(.li-include) {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+.li-fee-table input.li-hrs,
+.li-fee-table input.li-dollars {
+  width: 6rem;
+  padding: 0.3rem 0.5rem;
+  text-align: right;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.li-fee-table input.li-include-cb {
+  width: 1rem;
+  height: 1rem;
+}
+
 /* Help text */
 .help-text {
   font-size: 0.8rem;
