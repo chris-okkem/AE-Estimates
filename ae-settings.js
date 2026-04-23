@@ -34,6 +34,7 @@ window.aeSettings = (function () {
     { id: 'dd-split',    label: 'DD CD Split',           render: () => renderDdSplit(),     bind: () => bindDdSplit() },
     { id: 'ca-split',    label: 'CA CD Split',           render: () => renderCaSplit(),     bind: () => bindCaSplit() },
     { id: 'struct-set',  label: 'Structural Settings',   render: () => renderStructSet(),   bind: () => bindStructSet() },
+    { id: 'min-fee',     label: 'Architect Minimum Fee', render: () => renderMinFee(),      bind: () => bindMinFee() },
     { id: 'city',        label: 'City Comments Base %',  render: () => renderCity(),        bind: () => bindCity() },
     { id: 'flags',       label: 'Regulatory Flags',      render: () => renderFlags(),       bind: () => bindFlags() },
   ];
@@ -737,6 +738,37 @@ window.aeSettings = (function () {
         workingCopy.structuralSettings[el.dataset.ss] = isFinite(v) ? v : 0;
         renderSectionBody();
       });
+    });
+  }
+
+  // ---------- Section: Architect Minimum Fee ----------
+
+  function renderMinFee() {
+    const v = workingCopy.architectMinimumFee != null ? workingCopy.architectMinimumFee : 0;
+    return `
+      <p class="ae-settings-help">
+        If the fee schedule produces an architect base fee below this amount,
+        the base is bumped up to this floor before phase distribution. Excluded
+        phases (e.g., permit-only scopes) still drop out on top — this is a
+        floor on the base, not on the sum of included lines. Set to 0 to disable.
+      </p>
+      <div class="ae-settings-table">
+        <div class="ae-settings-table-row ae-ss-row">
+          <span class="ae-settings-row-label">Minimum architect fee ($)</span>
+          <input type="number" class="ae-settings-input" id="aeArchMinFee" step="500" min="0" value="${v}">
+          <span class="ae-settings-help-inline">default $10,000</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindMinFee() {
+    const el = document.getElementById('aeArchMinFee');
+    if (!el) return;
+    el.addEventListener('change', () => {
+      const v = parseFloat(el.value);
+      workingCopy.architectMinimumFee = isFinite(v) && v >= 0 ? v : 0;
+      renderSectionBody();
     });
   }
 

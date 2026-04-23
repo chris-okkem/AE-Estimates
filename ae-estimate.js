@@ -182,6 +182,10 @@
     // City comments now reads as % of permit set, not % of architect share.
     if (typeof cfg.cityCommentsPctOfPermitSet !== 'number') cfg.cityCommentsPctOfPermitSet = 0.25;
     delete cfg.cityCommentsBasePct;
+    // Architect minimum fee floor (added later — default 10,000 if missing).
+    if (typeof cfg.architectMinimumFee !== 'number' || cfg.architectMinimumFee < 0) {
+      cfg.architectMinimumFee = 10000;
+    }
     // Drop legacy city comments adder from each flag.
     if (Array.isArray(cfg.regulatoryFlags)) {
       cfg.regulatoryFlags.forEach((f) => { delete f.cityCommentsAdder; });
@@ -250,7 +254,15 @@
     // The fee schedule is architect-only; the table value IS the architect's
     // base fee. Structural is a separate scope that sits in its own section
     // and adds to the grand total — not subtracted here.
-    const architectShare = totalFeeBase;
+    //
+    // Minimum architect fee floor: if the schedule produces a base below
+    // `architectMinimumFee`, bump up to that floor before phase distribution.
+    // Phase exclusions (DD/CA scaling, permit-only scopes, etc.) still apply
+    // on top — this is a floor on the base, not on the sum of included lines.
+    const architectShareRaw = totalFeeBase;
+    const architectMinimumFee = (cfg.architectMinimumFee != null && cfg.architectMinimumFee >= 0) ? cfg.architectMinimumFee : 0;
+    const architectShare = Math.max(architectShareRaw, architectMinimumFee);
+    const architectFloorApplied = architectShare > architectShareRaw;
 
     const pw = cfg.phaseWeights;
     const feasibilityConceptDollars = architectShare * pw.feasibilityConcept;
@@ -315,6 +327,9 @@
       totalFeeBase,
       totalStructuralFee,
       architectShare,
+      architectShareRaw,
+      architectMinimumFee,
+      architectFloorApplied,
       permitSetUpliftFactor,
       cityCommentsPctOfPermitSet,
       schedule: {
@@ -708,11 +723,11 @@
         </div>
         <div class="ae-calc-strip">
           <div class="ae-calc-formula">
-            ${fmtMoney(result.stage1.effCost)} × ${(s2.feePct * 100).toFixed(2)}%
-            <span class="ae-calc-hint">(structural fees compute separately — see Structural Engineering section)</span>
+            ${fmtMoney(result.stage1.effCost)} × ${(s2.feePct * 100).toFixed(2)}%${s2.architectFloorApplied ? ` = ${fmtMoney(s2.architectShareRaw)} <span class="ae-calc-hint">(below ${fmtMoney(s2.architectMinimumFee)} minimum — bumped to floor)</span>` : ''}
+            ${!s2.architectFloorApplied ? '<span class="ae-calc-hint">(structural fees compute separately — see Structural Engineering section)</span>' : ''}
           </div>
           <div class="ae-calc-result">
-            <span class="ae-calc-label">Base Architect Fee</span>
+            <span class="ae-calc-label">Base Architect Fee${s2.architectFloorApplied ? ' (floored)' : ''}</span>
             <span class="ae-calc-value">${fmtMoney(s2.architectShare)}</span>
           </div>
         </div>

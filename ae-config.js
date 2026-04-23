@@ -115,6 +115,12 @@ window.aeConfig = (function () {
       bidSet: 0.50,
       constructionSet: 0.50,
     },
+    // Minimum architect fee before phase distribution. If the schedule
+    // produces an architect base fee below this, it is bumped up to this
+    // value (and the phase distribution flows from the bumped number).
+    // Excluded phases still drop out — this is a floor on the base, not
+    // on the sum of included lines. Tuneable per-project via Settings.
+    architectMinimumFee: 10000,
     // Permit Set sizing: permit_set_dollars = base × (permitSetBaseFactor + Σ active permit adders).
     // With no flags active, permit set is reduced to 80% of its CD-split allocation.
     // Each active flag adds work back on top.
