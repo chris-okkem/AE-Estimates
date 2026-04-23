@@ -695,6 +695,9 @@
             <label for="aeScheduleFactor">Fee Schedule Factor <span class="ae-calc-hint">multiplies the whole table for calibration</span></label>
             <input type="number" id="aeScheduleFactor" step="0.05" min="0" value="${(cfg.feeSchedule.factor != null ? cfg.feeSchedule.factor : 1).toString()}">
           </div>
+          <div class="form-group" style="flex: 0 0 auto; align-self: flex-end;">
+            <button type="button" class="btn btn-secondary" id="aeViewScheduleBtn">View Fee Schedule</button>
+          </div>
         </div>
         <div class="ae-fee-breakdown">
           <span>Cat ${sch.categoryKey} · ${escapeHtml(sch.bracketLabel)}</span>
@@ -916,6 +919,11 @@
         state.config.feeSchedule.factor = v;
         render();
       });
+    }
+
+    const viewScheduleBtn = document.getElementById('aeViewScheduleBtn');
+    if (viewScheduleBtn) {
+      viewScheduleBtn.addEventListener('click', () => openFeeScheduleModal());
     }
 
     document.querySelectorAll('[data-flag-id]').forEach((cb) => {
@@ -1235,6 +1243,111 @@
   //
   // Mirrors Chris's proposal template. Fills in dynamic fields from state;
   // keeps template narrative, assumptions, and T&Cs verbatim.
+
+  // ---------- View Fee Schedule modal ----------
+  //
+  // Renders the current (per-project) fee schedule as a category × cost-
+  // bracket matrix. Highlights the row/column currently selected on the
+  // form. Base % × complexity factor × schedule factor = the effective %
+  // used by the calc, so the modal shows both the raw table and the
+  // effective values side by side.
+
+  function openFeeScheduleModal() {
+    const cfg = ensureConfig();
+    const sch = cfg.feeSchedule;
+    const brackets = sch.brackets || [];
+    const categories = sch.categories || {};
+    const catKeys = Object.keys(categories);
+    const complexityFactors = sch.projectComplexityFactors || { simple: 0.85, normal: 1.00, complex: 1.15 };
+    const complexityLabels  = sch.projectComplexityLabels  || { simple: 'Simple', normal: 'Normal', complex: 'Complex' };
+    const factor = sch.factor != null ? sch.factor : 1;
+
+    const selectedCat = state.program && state.program.buildingCategory;
+    const selectedComplexity = (state.program && state.program.projectComplexity) || 'normal';
+    const complexityFactor = complexityFactors[selectedComplexity] || 1;
+    const effectiveMultiplier = complexityFactor * factor;
+
+    // Figure out which column the current construction cost lands in.
+    const cost = (window.aeEstimate && window.aeEstimate._calculate)
+      ? null
+      : null;
+    let selectedBracketIdx = -1;
+    try {
+      const result = calculate(state, cfg);
+      const effCost = result && result.stage1 && result.stage1.effCost;
+      if (effCost != null) {
+        for (let i = 0; i < brackets.length; i++) {
+          if (effCost < brackets[i].maxCost) { selectedBracketIdx = i; break; }
+        }
+        if (selectedBracketIdx === -1 && brackets.length) selectedBracketIdx = brackets.length - 1;
+      }
+    } catch (e) { /* ignore calc errors; still render the table */ }
+
+    const existing = document.getElementById('aeFeeScheduleModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'aeFeeScheduleModal';
+    modal.className = 'modal-overlay';
+
+    // Header rows (category row label + cost bracket columns).
+    const headerCells = brackets.map((b, i) => {
+      const cls = i === selectedBracketIdx ? 'ae-fee-col-selected' : '';
+      return `<th class="${cls}">${escapeHtml(b.label)}</th>`;
+    }).join('');
+
+    // Body rows: one per category, showing base % and (optionally) the
+    // effective % after multipliers, with current row highlighted.
+    const bodyRows = catKeys.map((k) => {
+      const cat = categories[k];
+      const rowCls = k === selectedCat ? 'ae-fee-row-selected' : '';
+      const cells = (cat.pcts || []).map((p, i) => {
+        const colSel = i === selectedBracketIdx;
+        const sel = (k === selectedCat && colSel) ? ' ae-fee-cell-selected' : (colSel ? ' ae-fee-col-selected' : '');
+        const basePct = (p * 100).toFixed(2);
+        const effPct  = (p * effectiveMultiplier * 100).toFixed(2);
+        return `<td class="${sel.trim()}"><div class="ae-fee-base">${basePct}%</div><div class="ae-fee-eff">${effPct}% eff</div></td>`;
+      }).join('');
+      return `<tr class="${rowCls}">
+        <th class="ae-fee-rowlabel" title="${escapeAttr(cat.description || '')}">${escapeHtml(cat.shortLabel || k)}</th>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    modal.innerHTML = `
+      <div class="modal-content modal-content-wide">
+        <div class="modal-header-row">
+          <h2>Architect Fee Schedule</h2>
+          <button class="btn btn-secondary" id="aeFeeScheduleClose">Close</button>
+        </div>
+        <p class="modal-subtitle">
+          Base % × complexity (${complexityLabels[selectedComplexity] || selectedComplexity}: ${complexityFactor.toFixed(2)})
+          × schedule factor (${factor.toFixed(2)}) = effective %.
+          Each cell shows both.
+        </p>
+        <div class="ae-fee-schedule-wrap">
+          <table class="ae-fee-schedule-table">
+            <thead>
+              <tr>
+                <th class="ae-fee-rowlabel">Category</th>
+                ${headerCells}
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+        <p class="modal-subtitle" style="margin-top:0.75rem;">
+          Highlighted row = selected Building Category. Highlighted column = where the current construction cost lands.
+          Hover a category label to see its full description.
+        </p>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('aeFeeScheduleClose').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+  }
 
   function openProposalModal() {
     const existing = document.getElementById('aeProposalModal');

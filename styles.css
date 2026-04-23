@@ -587,7 +587,62 @@ main {
 }
 
 .modal-content-wide {
-  max-width: 700px;
+  max-width: 900px;
+}
+
+/* Architect Fee Schedule modal */
+.ae-fee-schedule-wrap {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.ae-fee-schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.ae-fee-schedule-table th,
+.ae-fee-schedule-table td {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  vertical-align: middle;
+}
+.ae-fee-schedule-table thead th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+  font-size: 0.75rem;
+}
+.ae-fee-schedule-table .ae-fee-rowlabel {
+  text-align: left;
+  font-weight: 600;
+  background: #f8fafc;
+  white-space: nowrap;
+  max-width: 220px;
+  cursor: help;
+}
+.ae-fee-schedule-table .ae-fee-base {
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.ae-fee-schedule-table .ae-fee-eff {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.ae-fee-schedule-table .ae-fee-col-selected {
+  background: #fef3c7;
+}
+.ae-fee-schedule-table .ae-fee-row-selected th.ae-fee-rowlabel,
+.ae-fee-schedule-table .ae-fee-row-selected td {
+  background: #ecfeff;
+}
+.ae-fee-schedule-table .ae-fee-cell-selected {
+  background: #fde68a !important;
+  outline: 2px solid #f59e0b;
+  outline-offset: -2px;
 }
 
 .modal-content h2 {
