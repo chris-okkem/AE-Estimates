@@ -1716,7 +1716,7 @@
         <li style="${font}">Project Coordination: $160/hr</li>
         <li style="${font}">Non-Licensed Staff: $130/hr</li>
       </ul>
-      <p style="${font}">The following estimates are based on an anticipated effort to complete each service at a blended hourly rate comprised of the rates above.</p>
+      <p style="${font}">The following estimates are based on an anticipated effort to complete each service at an hourly rate blended from the rates above.</p>
       ${feeTableHtml}
       <p style="${font} margin-left: 30px; margin-right: 30px;"><strong>Note:</strong> Okkem Design typically completes projects of this type within approximately 10% of the estimated fee. Should projected fees exceed this threshold due to scope changes or unforeseen conditions, we will notify the Client and provide a revised estimate for approval.</p>
     `;
