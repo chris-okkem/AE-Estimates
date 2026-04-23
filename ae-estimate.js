@@ -20,8 +20,8 @@
     bidding_negotiation: 'Bidding / Negotiation',
     permit_submittals: 'Permit Submittals',
     city_comment_revisions: 'City Comment Revisions',
-    design_ca: 'Design CA',
-    structural_ca: 'Structural CA',
+    design_ca: 'Design Services',
+    structural_ca: 'Structural Services',
   };
 
   const MANUAL_LINES = new Set([
@@ -1556,21 +1556,20 @@
     const structComplexityLabel = (cfg.structuralComplexityLabels || { low: 'Low', medium: 'Medium', high: 'High' })[state.program.structuralComplexity] || state.program.structuralComplexity;
 
     const effCost = result.stage1.effCost;
-    const structuralCaLine = findLine(result, 'structural_ca');
-    const structuralCaFee = (structuralCaLine && !structuralCaLine.excluded) ? structuralCaLine.effDollars : 0;
 
-    // Total design fee excludes Structural CA per template convention.
-    const totalDesignFee = result.grandTotal.dollars - (structuralCaLine && !structuralCaLine.excluded ? structuralCaLine.effDollars : 0);
-    const totalHours     = result.grandTotal.hours - (structuralCaLine && !structuralCaLine.excluded ? structuralCaLine.effHours : 0);
+    // Grand total now includes Structural Services (formerly Structural CA).
+    const totalDesignFee = result.grandTotal.dollars;
+    const totalHours     = result.grandTotal.hours;
 
     // ---- Fee breakdown table ----
     // Section header row shows the section name + subtotal hours + subtotal
-    // fee. Line items below are indented. Structural CA is excluded from the
-    // table (shown separately). Hours rounded to whole numbers.
+    // fee. Line items below are indented. All included lines render — the
+    // separate Structural Construction Phase callout is gone now that the
+    // line lives in the fee table.
     const feeTableHtml = (() => {
       const rows = [];
       result.sections.forEach((sect) => {
-        const activeLines = sect.lines.filter((l) => !l.excluded && l.effDollars > 0 && l.id !== 'structural_ca');
+        const activeLines = sect.lines.filter((l) => !l.excluded && l.effDollars > 0);
         if (activeLines.length === 0) return;
         const subtotalHours   = activeLines.reduce((s, l) => s + (l.effHours   || 0), 0);
         const subtotalDollars = activeLines.reduce((s, l) => s + (l.effDollars || 0), 0);
@@ -1671,8 +1670,8 @@
         ${scopeBullet('bidding_negotiation', 'Bidding / Negotiation', 'Assistance with obtaining and evaluating contractor proposals including bid package issuance, response to contractor questions, addenda preparation, bid leveling and comparison, and recommendations to the Owner.')}
         ${scopeBullet('permit_submittals', 'Permit Submittals', 'Preparation and submission of permit application materials to the Authority Having Jurisdiction, management of the submittal process, and coordination with permit reviewers as needed to advance the project through permit review.')}
         ${scopeBullet('city_comment_revisions', 'City Comment Revisions', 'Response to plan review comments from the authority having jurisdiction and revisions to drawings and specifications as required to obtain permit approval. Scope depends on the comments received and is billed hourly.')}
-        ${scopeBullet('design_ca', 'Design CA', 'Design-side support during construction including periodic site observation visits, response to contractor Requests for Information (RFIs) related to design intent, review of shop drawings and submittals for conformance with the design, material and finish approvals, design clarifications and field-issued sketches, and the punch list at substantial completion. Site observations are conducted to become familiar with the progress and quality of the Work; continuous on-site inspection is not provided.')}
-        ${scopeBullet('structural_ca', 'Structural CA', 'Structural-side support during construction including site observation of structural construction at key milestones (foundation, framing), response to contractor RFIs related to structural design, review of structural shop drawings and submittals, and field clarifications of structural details.')}
+        ${scopeBullet('design_ca', 'Design Services', 'Design-side support during construction including periodic site observation visits, response to contractor Requests for Information (RFIs) related to design intent, review of shop drawings and submittals for conformance with the design, material and finish approvals, design clarifications and field-issued sketches, and the punch list at substantial completion. Site observations are conducted to become familiar with the progress and quality of the Work; continuous on-site inspection is not provided.')}
+        ${scopeBullet('structural_ca', 'Structural Services', 'Structural-side support during construction including site observation of structural construction at key milestones (foundation, framing), response to contractor RFIs related to structural design, review of structural shop drawings and submittals, and field clarifications of structural details.')}
       </ul>
     `;
 
@@ -1712,8 +1711,6 @@
       <p style="${font}">The following estimates are based on an anticipated effort to complete each service, based on the scope defined in earlier sections, and a blended hourly rate.</p>
       ${feeTableHtml}
       <p style="${font} margin-left: 30px; margin-right: 30px;"><strong>Note:</strong> Okkem Design typically completes projects of this type within approximately 10% of the estimated fee. Should projected fees exceed this threshold due to scope changes or unforeseen conditions, we will notify the Client and provide a revised estimate for approval.</p>
-      <p style="${font}"><strong>Structural Construction Phase Services:</strong> Based on the current scope and assumptions, Okkem Design anticipates a Structural "Construction Phase" fee of <strong>${structuralCaFee > 0 ? money(structuralCaFee) : '[Structural CA Fee]'}</strong>.</p>
-      <p style="${font}">This fee will be confirmed in a separate communication issued after the completion of the Structural Design phase.</p>
       <p style="${font}"><strong>Hourly Rate Schedule</strong></p>
       <ul style="${font}">
         <li style="${font}">Licensed Design Professional: $190/hr</li>
