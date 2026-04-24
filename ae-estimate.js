@@ -186,6 +186,21 @@
     if (typeof cfg.architectMinimumFee !== 'number' || cfg.architectMinimumFee < 0) {
       cfg.architectMinimumFee = 10000;
     }
+    // Backfill CD-related splits and structural settings on older saves —
+    // missing keys here previously caused the corresponding Settings
+    // sections to crash on render.
+    if (!cfg.cdSubLevelSplit || typeof cfg.cdSubLevelSplit !== 'object') {
+      cfg.cdSubLevelSplit = { permitSet: 0.22, bidSet: 0.33, constructionSet: 0.45 };
+    }
+    if (!cfg.designDevelopmentCdSplit || typeof cfg.designDevelopmentCdSplit !== 'object') {
+      cfg.designDevelopmentCdSplit = { permitSet: 0.25, bidSet: 0.25, constructionSet: 0.50 };
+    }
+    if (!cfg.constructionAdministrationCdSplit || typeof cfg.constructionAdministrationCdSplit !== 'object') {
+      cfg.constructionAdministrationCdSplit = { permitSet: 0.00, bidSet: 0.50, constructionSet: 0.50 };
+    }
+    if (!cfg.structuralSettings || typeof cfg.structuralSettings !== 'object') {
+      cfg.structuralSettings = { share: 0.60, totalRate: 0.0135, designPortion: 0.80, caPortion: 0.20 };
+    }
     // Drop legacy city comments adder from each flag.
     if (Array.isArray(cfg.regulatoryFlags)) {
       cfg.regulatoryFlags.forEach((f) => { delete f.cityCommentsAdder; });

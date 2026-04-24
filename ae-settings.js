@@ -664,6 +664,12 @@ window.aeSettings = (function () {
   }
 
   function renderSplitTrio(title, key, dataAttr, helpText) {
+    // Defensive: older saved configs may be missing one of these split keys
+    // entirely. Seed it with zeros so the section still renders and the user
+    // can set values (which Save as Default will then persist correctly).
+    if (!workingCopy[key] || typeof workingCopy[key] !== 'object') {
+      workingCopy[key] = { permitSet: 0, bidSet: 0, constructionSet: 0 };
+    }
     const s = workingCopy[key];
     const labels = { permitSet: 'Permit Set', bidSet: 'Bid Set', constructionSet: 'Construction Set' };
     const sum = (s.permitSet || 0) + (s.bidSet || 0) + (s.constructionSet || 0);
