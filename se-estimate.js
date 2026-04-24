@@ -8,34 +8,51 @@
     { value: 'mostly_locked', label: 'Mostly Locked (minor coordination)' },
     { value: 'fluid',         label: 'Fluid (early design assist)' },
   ];
-  // Complexity factors scale only the parts of the calc they touch:
-  //   gravity factor → framing + P&B + roof + non-lateral modifiers
-  //   lateral factor → lateral hours
-  // Foundation and concrete details are left alone (they're already
-  // per-event counted, and unusual foundation complexity on e.g. PEMB
-  // is captured via extra major-concrete-details rather than here).
+  // Each option carries two numbers:
+  //   factor      → multiplies design hours for the relevant scope
+  //                 (gravity factor → framing + P&B + roof + non-lateral
+  //                  modifiers; lateral factor → lateral hours only)
+  //   caModifier  → additive contribution to the CA percentage of raw work
+  //                 (accumulated across gravity + lateral + project-type
+  //                  axes, clamped to 35%)
   const GRAVITY_SYSTEM_OPTIONS = [
-    { value: 'light_wood_framing',  label: 'Light Wood Framing',             factor: 1.00 },
-    { value: 'heavy_timber',        label: 'Heavy Timber / Mass Timber',     factor: 1.40 },
-    { value: 'cold_formed_steel',   label: 'Cold-Formed Steel Framing',      factor: 1.30 },
-    { value: 'structural_steel',    label: 'Structural Steel Framing',       factor: 1.40 },
-    { value: 'concrete_framing',    label: 'Concrete Framing',               factor: 1.50 },
-    { value: 'precast_tilt_up',     label: 'Precast / Tilt-Up Concrete',     factor: 1.45 },
-    { value: 'masonry_cmu',         label: 'Masonry / CMU Bearing Wall',     factor: 1.30 },
-    { value: 'pemb',                label: 'PEMB / Metal Building System',   factor: 0.70 },
-    { value: 'hybrid_gravity',      label: 'Hybrid / Mixed Gravity System',  factor: 1.50 },
+    { value: 'light_wood_framing',  label: 'Light Wood Framing',             factor: 1.00, caModifier: 0.00 },
+    { value: 'heavy_timber',        label: 'Heavy Timber / Mass Timber',     factor: 1.40, caModifier: 0.06 },
+    { value: 'cold_formed_steel',   label: 'Cold-Formed Steel Framing',      factor: 1.30, caModifier: 0.04 },
+    { value: 'structural_steel',    label: 'Structural Steel Framing',       factor: 1.40, caModifier: 0.06 },
+    { value: 'concrete_framing',    label: 'Concrete Framing',               factor: 1.50, caModifier: 0.08 },
+    { value: 'precast_tilt_up',     label: 'Precast / Tilt-Up Concrete',     factor: 1.45, caModifier: 0.08 },
+    { value: 'masonry_cmu',         label: 'Masonry / CMU Bearing Wall',     factor: 1.30, caModifier: 0.06 },
+    { value: 'pemb',                label: 'PEMB / Metal Building System',   factor: 0.70, caModifier: 0.04 },
+    { value: 'hybrid_gravity',      label: 'Hybrid / Mixed Gravity System',  factor: 1.50, caModifier: 0.08 },
   ];
   const LATERAL_SYSTEM_OPTIONS = [
-    { value: 'wood_shear_wall',     label: 'Wood Braced Wall / Wood Shear Wall',         factor: 1.00 },
-    { value: 'cfs_shear_wall',      label: 'Cold-Formed Steel Shear Wall / Strap Bracing', factor: 1.25 },
-    { value: 'steel_moment_frame',  label: 'Steel Moment Frame / Portal Frame',          factor: 1.45 },
-    { value: 'steel_braced_frame',  label: 'Steel Braced Frame',                         factor: 1.30 },
-    { value: 'concrete_shear_wall', label: 'Concrete Shear Wall / Core',                 factor: 1.45 },
-    { value: 'masonry_shear_wall',  label: 'Masonry / CMU Shear Wall',                   factor: 1.35 },
-    { value: 'tilt_up_shear_wall',  label: 'Tilt-Up / Precast Concrete Shear Wall',      factor: 1.40 },
-    { value: 'diaphragm_collector', label: 'Diaphragm / Collector-Heavy System',         factor: 1.50 },
-    { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System',              factor: 1.60 },
+    { value: 'wood_shear_wall',     label: 'Wood Braced Wall / Wood Shear Wall',         factor: 1.00, caModifier: 0.00 },
+    { value: 'cfs_shear_wall',      label: 'Cold-Formed Steel Shear Wall / Strap Bracing', factor: 1.25, caModifier: 0.04 },
+    { value: 'steel_moment_frame',  label: 'Steel Moment Frame / Portal Frame',          factor: 1.45, caModifier: 0.08 },
+    { value: 'steel_braced_frame',  label: 'Steel Braced Frame',                         factor: 1.30, caModifier: 0.06 },
+    { value: 'concrete_shear_wall', label: 'Concrete Shear Wall / Core',                 factor: 1.45, caModifier: 0.08 },
+    { value: 'masonry_shear_wall',  label: 'Masonry / CMU Shear Wall',                   factor: 1.35, caModifier: 0.06 },
+    { value: 'tilt_up_shear_wall',  label: 'Tilt-Up / Precast Concrete Shear Wall',      factor: 1.40, caModifier: 0.08 },
+    { value: 'diaphragm_collector', label: 'Diaphragm / Collector-Heavy System',         factor: 1.50, caModifier: 0.08 },
+    { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System',              factor: 1.60, caModifier: 0.08 },
   ];
+
+  const PROJECT_TYPE_OPTIONS = [
+    { value: 'new_construction', label: 'New Construction', caModifier: 0.00 },
+    { value: 'addition',         label: 'Addition',         caModifier: 0.03 },
+    { value: 'remodel',          label: 'Remodel',          caModifier: 0.06 },
+  ];
+
+  const TRUSS_PACKAGE_OPTIONS = [
+    { value: 'no',  label: 'No' },
+    { value: 'yes', label: 'Yes' },
+  ];
+
+  const CA_BASE_PCT = 0.10;
+  const CA_CAP_PCT  = 0.35;
+  const CA_SPLIT = { observation: 0.50, rfi: 0.33, submittal: 0.17 };
+  const CA_FLOORS = { observation: 6, rfi: 4, submittal: 2 };
 
   function gravityFactorFor(value) {
     const o = GRAVITY_SYSTEM_OPTIONS.find((x) => x.value === value);
@@ -44,6 +61,10 @@
   function lateralFactorFor(value) {
     const o = LATERAL_SYSTEM_OPTIONS.find((x) => x.value === value);
     return o ? o.factor : 1.0;
+  }
+  function caModifierFor(options, value) {
+    const o = options.find((x) => x.value === value);
+    return o && typeof o.caModifier === 'number' ? o.caModifier : 0;
   }
   const FOUNDATION_TYPE_OPTIONS = [
     { value: 'slab_on_grade', label: 'Slab-on-grade' },
@@ -91,6 +112,8 @@
         designStability: 'mostly_locked',
         gravitySystem: 'light_wood_framing',
         lateralSystem: 'wood_shear_wall',
+        projectType: 'new_construction',
+        trussPackage: 'no',
         foundationType: 'slab_on_grade',
         geotechReport: 'to_be_provided',
       },
@@ -216,6 +239,12 @@
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:1">
+              <label for="projectType">Project Type</label>
+              <select id="projectType">
+                ${PROJECT_TYPE_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.projectType === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
               <label for="foundationType">Foundation Type</label>
               <select id="foundationType">
                 ${FOUNDATION_TYPE_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.foundationType === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
@@ -225,6 +254,14 @@
               <label for="geotechReport">Geotechnical Report</label>
               <select id="geotechReport">
                 ${GEOTECH_REPORT_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.geotechReport === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label for="trussPackage">Truss Package Expected</label>
+              <select id="trussPackage">
+                ${TRUSS_PACKAGE_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.trussPackage === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -714,11 +751,15 @@
     const designStabilityEl = document.getElementById('designStability');
     const gravitySystemEl   = document.getElementById('gravitySystem');
     const lateralSystemEl   = document.getElementById('lateralSystem');
+    const projectTypeEl     = document.getElementById('projectType');
+    const trussPackageEl    = document.getElementById('trussPackage');
     const foundationTypeEl  = document.getElementById('foundationType');
     const geotechReportEl   = document.getElementById('geotechReport');
     if (designStabilityEl) state.assumptions.designStability = designStabilityEl.value;
     if (gravitySystemEl)   state.assumptions.gravitySystem   = gravitySystemEl.value;
     if (lateralSystemEl)   state.assumptions.lateralSystem   = lateralSystemEl.value;
+    if (projectTypeEl)     state.assumptions.projectType     = projectTypeEl.value;
+    if (trussPackageEl)    state.assumptions.trussPackage    = trussPackageEl.value;
     if (foundationTypeEl)  state.assumptions.foundationType  = foundationTypeEl.value;
     if (geotechReportEl)   state.assumptions.geotechReport   = geotechReportEl.value;
 
@@ -1015,6 +1056,52 @@
     work.push({ heading: 'Fee Estimate' });
     work.push({ label: 'Rate', detail: '', value: '$' + formatNum(rate) + ' /hr' });
     work.push({ label: 'Fee', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(fee), bold: true });
+
+    // ----- Step 9: Construction Phase Services (auto-populate) -----
+    // CA percentage is additive across three independent axes (gravity,
+    // lateral, project type), clamped at 35%. Each CA line item has a
+    // floor so tiny projects don't drop below a minimum effort.
+    // Submittal Review is zeroed out when there are no shop drawings.
+    work.push({ heading: 'Step 9: Construction Phase Services' });
+
+    const gravCaMod = caModifierFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
+    const latCaMod  = caModifierFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
+    const projCaMod = caModifierFor(PROJECT_TYPE_OPTIONS, a.projectType);
+    const projLabel = labelFor(PROJECT_TYPE_OPTIONS, a.projectType);
+
+    let caPct = CA_BASE_PCT + gravCaMod + latCaMod + projCaMod;
+    const caPctClamped = Math.min(caPct, CA_CAP_PCT);
+    const caTotal = rawWorkHours * caPctClamped;
+
+    // Shop drawings assumed for any non-wood gravity system. For light wood,
+    // the Truss Package dropdown determines whether submittal review applies.
+    const hasShopDrawings = (a.gravitySystem !== 'light_wood_framing') || (a.trussPackage === 'yes');
+
+    const obsHrs = Math.max(caTotal * CA_SPLIT.observation, CA_FLOORS.observation);
+    const rfiHrs = Math.max(caTotal * CA_SPLIT.rfi,         CA_FLOORS.rfi);
+    const subHrs = hasShopDrawings ? Math.max(caTotal * CA_SPLIT.submittal, CA_FLOORS.submittal) : 0;
+    const caLineTotal = obsHrs + rfiHrs + subHrs;
+
+    work.push({ label: 'CA %', detail: `${(CA_BASE_PCT*100).toFixed(0)}% base + ${(gravCaMod*100).toFixed(0)}% gravity + ${(latCaMod*100).toFixed(0)}% lateral + ${(projCaMod*100).toFixed(0)}% ${projLabel.toLowerCase()}${caPct > CA_CAP_PCT ? ` (capped from ${(caPct*100).toFixed(0)}%)` : ''}`, value: (caPctClamped*100).toFixed(0) + '%' });
+    work.push({ label: 'CA Total (pre-floors)', detail: `${formatNum(rawWorkHours)} raw × ${(caPctClamped*100).toFixed(0)}%`, value: formatNum(caTotal) + ' hrs' });
+    work.push({ label: 'Shop drawings', detail: hasShopDrawings ? 'yes — submittal review active' : 'no — submittal review off', value: '' });
+    work.push({ label: 'Structural Observation', detail: `max(${formatNum(caTotal * CA_SPLIT.observation)}, floor ${CA_FLOORS.observation})`, value: formatNum(obsHrs) + ' hrs' });
+    work.push({ label: 'RFI Response', detail: `max(${formatNum(caTotal * CA_SPLIT.rfi)}, floor ${CA_FLOORS.rfi})`, value: formatNum(rfiHrs) + ' hrs' });
+    work.push({ label: 'Submittal Review', detail: hasShopDrawings ? `max(${formatNum(caTotal * CA_SPLIT.submittal)}, floor ${CA_FLOORS.submittal})` : 'no shop drawings', value: formatNum(subHrs) + ' hrs' });
+    work.push({ label: 'CA Line Total', detail: `${formatNum(obsHrs)} + ${formatNum(rfiHrs)} + ${formatNum(subHrs)}`, value: formatNum(caLineTotal) + ' hrs', bold: true });
+
+    // Apply the auto-populated CA hours/dollars to state.lineItems so the
+    // Fee Estimate table picks them up on next render. Always overwrites —
+    // user edits to CA lines are replaced on every Calculate.
+    if (!state.lineItems) state.lineItems = makeInitialLineItems();
+    const writeLine = (id, hrs) => {
+      if (!state.lineItems[id]) state.lineItems[id] = { hours: 0, dollars: 0, included: true };
+      state.lineItems[id].hours = hrs;
+      state.lineItems[id].dollars = hrs * rate;
+    };
+    writeLine('structural_observation', obsHrs);
+    writeLine('rfi_response', rfiHrs);
+    writeLine('submittal_review', subHrs);
 
     renderOutput(work, totalHours, rate);
   }
