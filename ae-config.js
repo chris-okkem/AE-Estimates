@@ -36,19 +36,19 @@ window.aeConfig = (function () {
       stage2: { low: 0.80, medium: 1.0, high: 1.30 },
     },
     sizeCurve: {
-      small:    { position: 500,   multiplier: 1.60 },
+      small:    { position: 1500,  multiplier: 1.15 },
       standard: { position: 3000,  multiplier: 1.00 },  // locked
-      large:    { position: 12000, multiplier: 1.05 },
+      large:    { position: 6000,  multiplier: 0.85 },
     },
     conditionedDensityCurve: {
-      sparse:   { position: 1.0, multiplier: 0.85 },
-      standard: { position: 4.0, multiplier: 1.00 },  // locked
-      dense:    { position: 8.0, multiplier: 1.20 },
+      sparse:   { position: 3,  multiplier: 0.75 },
+      standard: { position: 6,  multiplier: 1.00 },   // locked
+      dense:    { position: 12, multiplier: 1.25 },
     },
     unconditionedDensityCurve: {
-      sparse:   { position: 0.5, multiplier: 0.90 },
-      standard: { position: 1.5, multiplier: 1.00 },  // locked
-      dense:    { position: 4.0, multiplier: 1.15 },
+      sparse:   { position: 0, multiplier: 0 },
+      standard: { position: 1, multiplier: 1.00 },    // locked
+      dense:    { position: 2, multiplier: 1.10 },
     },
     // Fee schedule: AIA-style matrix of building category × cost bracket.
     // Each category row's pcts[] aligns with brackets[]. Final fee % =
@@ -78,7 +78,7 @@ window.aeConfig = (function () {
     },
     structuralSettings: {
       share: 0.60,         // fraction of construction cost that is structural work
-      totalRate: 0.0135,   // engineer's total fee as % of structural work value
+      totalRate: 0.015,    // engineer's total fee as % of structural work value
       designPortion: 0.80, // Structural Engineering line as fraction of total structural fee
       caPortion: 0.20,     // Structural CA line as fraction of total structural fee
     },
@@ -116,8 +116,8 @@ window.aeConfig = (function () {
     // produces an architect base fee below this, it is bumped up to this
     // value (and the phase distribution flows from the bumped number).
     // Excluded phases still drop out — this is a floor on the base, not
-    // on the sum of included lines. Tuneable per-project via Settings.
-    architectMinimumFee: 10000,
+    // on the sum of included lines.
+    architectMinimumFee: 12250,
     // Permit Set sizing: permit_set_dollars = base × (permitSetBaseFactor + Σ active permit adders).
     // With no flags active, permit set is reduced to 80% of its CD-split allocation.
     // Each active flag adds work back on top.
@@ -125,14 +125,14 @@ window.aeConfig = (function () {
     // City Comment Revisions allowance is a fraction of the (post-flag) permit set value.
     cityCommentsPctOfPermitSet: 0.25,
     regulatoryFlags: [
-      { id: 'subchapter_f',     label: 'Subchapter F',                permitSetAdder: 0.15 },
-      { id: 'protected_trees',  label: 'Protected trees',             permitSetAdder: 0.15 },
-      { id: 'historic_district', label: 'Historic district',          permitSetAdder: 0.25 },
-      { id: 'hillside',         label: 'Hillside',                    permitSetAdder: 0.10 },
-      { id: 'floodplain',       label: 'Floodplain',                  permitSetAdder: 0.15 },
-      { id: 'water_quality_overlay', label: 'Water quality overlay',  permitSetAdder: 0.10 },
-      { id: 'wildlife_urban_interface', label: 'Wildlife Urban Interface', permitSetAdder: 0.10 },
-      { id: 'visitability_plan', label: 'Visitability plan',          permitSetAdder: 0.05 },
+      { id: 'subchapter_f',             label: 'Subchapter F',              permitSetAdder: 0.10 },
+      { id: 'protected_trees',          label: 'Protected trees',           permitSetAdder: 0.10 },
+      { id: 'historic_district',        label: 'Historic district',         permitSetAdder: 0.10 },
+      { id: 'hillside',                 label: 'Hillside',                  permitSetAdder: 0.10 },
+      { id: 'floodplain',               label: 'Floodplain',                permitSetAdder: 0.10 },
+      { id: 'water_quality_overlay',    label: 'Water quality overlay',     permitSetAdder: 0.10 },
+      { id: 'wildlife_urban_interface', label: 'Wildlife Urban Interface',  permitSetAdder: 0.10 },
+      { id: 'visitability_plan',        label: 'Visitability plan',         permitSetAdder: 0.10 },
     ],
   };
 
@@ -251,48 +251,22 @@ window.aeConfig = (function () {
     return JSON.parse(JSON.stringify(obj));
   }
 
+  // Config is now shipped-defaults only. localStorage-backed saves were
+  // removed because they proved unreliable (browser storage can be wiped
+  // without warning, and multiple users hit the "my settings disappeared"
+  // failure mode). The single source of truth is DEFAULT_CONFIG in this
+  // file — any change has to be committed to the repo.
   function loadConfig() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return deepClone(DEFAULT_CONFIG);
-      const parsed = JSON.parse(raw);
-      // Accept either a bare config object or a { version, config } envelope.
-      return parsed.config || parsed;
-    } catch (e) {
-      console.warn('Failed to load A/E config, using defaults:', e);
-      return deepClone(DEFAULT_CONFIG);
-    }
+    return deepClone(DEFAULT_CONFIG);
   }
 
-  function saveConfig(cfg) {
-    try {
-      // Back up prior config first.
-      const prior = localStorage.getItem(STORAGE_KEY);
-      if (prior) {
-        const backups = loadBackups();
-        backups.push({ timestamp: new Date().toISOString(), raw: prior });
-        while (backups.length > MAX_BACKUPS) backups.shift();
-        localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
-      }
-      const envelope = { version: 1, config: cfg };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
-    } catch (e) {
-      console.warn('Failed to save A/E config:', e);
-    }
-  }
+  // No-op: kept for backward compatibility with callers that still invoke
+  // it. Does not persist anywhere.
+  function saveConfig(_cfg) { /* intentionally empty */ }
 
-  function loadBackups() {
-    try {
-      const raw = localStorage.getItem(BACKUP_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
+  function loadBackups() { return []; }
 
-  function resetToDefaults() {
-    saveConfig(deepClone(DEFAULT_CONFIG));
-  }
+  function resetToDefaults() { /* already at defaults — no-op */ }
 
   // ---------- Program defaults persistence (estimate-side) ----------
 

@@ -36,7 +36,6 @@ window.aeSettings = (function () {
     { id: 'min-fee',     label: 'Architect Minimum Fee', render: () => renderMinFee(),      bind: () => bindMinFee() },
     { id: 'city',        label: 'City Comments Base %',  render: () => renderCity(),        bind: () => bindCity() },
     { id: 'flags',       label: 'Regulatory Flags',      render: () => renderFlags(),       bind: () => bindFlags() },
-    { id: 'backups',     label: 'Settings Backups',      render: () => renderBackups(),     bind: () => bindBackups() },
   ];
 
   // ---------- Public open ----------
@@ -78,8 +77,11 @@ window.aeSettings = (function () {
     modalEl.innerHTML = `
       <div class="ae-settings-modal">
         <div class="ae-settings-header">
-          <h2>A/E Settings</h2>
-          <button class="ae-settings-close" id="aeSettingsCloseX" title="Cancel">&times;</button>
+          <h2>A/E Settings <span class="ae-settings-readonly-badge">View only</span></h2>
+          <button class="ae-settings-close" id="aeSettingsCloseX" title="Close">&times;</button>
+        </div>
+        <div class="ae-settings-readonly-banner">
+          Settings ship with the tool and are not editable here. The values below are the active defaults for every project; any change has to be committed to the repo. Use the inputs on the main estimate form for per-project tuning (Fee Schedule Factor, Regional Multiplier, line overrides, regulatory flag toggles).
         </div>
         <div class="ae-settings-shell">
           <nav class="ae-settings-nav" id="aeSettingsNav">
@@ -88,18 +90,14 @@ window.aeSettings = (function () {
             `).join('')}
             <div class="ae-settings-nav-spacer"></div>
             <button class="ae-settings-nav-aux" id="aeSettingsExport">Export Settings</button>
-            <button class="ae-settings-nav-aux" id="aeSettingsImport">Import Settings</button>
           </nav>
           <div class="ae-settings-body" id="aeSettingsBody">
             <!-- section contents render here -->
           </div>
         </div>
         <div class="ae-settings-footer">
-          <button class="btn btn-secondary" id="aeSettingsResetDefaults">Reset to Defaults</button>
           <div class="ae-settings-footer-spacer"></div>
-          <button class="btn btn-secondary" id="aeSettingsCancel">Close</button>
-          <button class="btn btn-secondary" id="aeSettingsApply">Apply</button>
-          <button class="btn btn-primary" id="aeSettingsSaveDefault">Save as Default</button>
+          <button class="btn btn-primary" id="aeSettingsCancel">Close</button>
         </div>
       </div>
     `;
@@ -111,15 +109,7 @@ window.aeSettings = (function () {
   function bindModalChrome() {
     document.getElementById('aeSettingsCloseX').addEventListener('click', close);
     document.getElementById('aeSettingsCancel').addEventListener('click', close);
-    document.getElementById('aeSettingsApply').addEventListener('click', (e) => apply(false, e.currentTarget, 'Applied'));
-    document.getElementById('aeSettingsSaveDefault').addEventListener('click', (e) => apply(true, e.currentTarget, 'Saved'));
-    document.getElementById('aeSettingsResetDefaults').addEventListener('click', () => {
-      if (!confirm('Reset working copy to your last saved defaults?')) return;
-      workingCopy = window.aeConfig.loadConfig();
-      renderSectionBody();
-    });
     document.getElementById('aeSettingsExport').addEventListener('click', exportSettings);
-    document.getElementById('aeSettingsImport').addEventListener('click', importSettings);
     document.getElementById('aeSettingsNav').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-section-id]');
       if (!btn) return;
@@ -155,6 +145,23 @@ window.aeSettings = (function () {
     body.innerHTML = `<div class="ae-settings-section"><h3>${escapeHtml(sect.label)}</h3>${sect.render()}</div>`;
     if (sect.bind) sect.bind();
     bindWarningTooltips();
+    lockAllInputs(body);
+  }
+
+  // View-only mode: disable every interactive control inside the body.
+  // Prevents user edits without destroying the section's rendering logic.
+  function lockAllInputs(root) {
+    root.querySelectorAll('input, select, textarea, button').forEach((el) => {
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        el.disabled = true;
+      } else if (el.tagName === 'BUTTON') {
+        // Hide section-local action buttons (add flag, remove flag, etc).
+        el.style.display = 'none';
+      } else {
+        el.readOnly = true;
+        el.classList.add('ae-readonly-input');
+      }
+    });
   }
 
   // ---------- Warning marker helper ----------
@@ -825,83 +832,8 @@ window.aeSettings = (function () {
     }
   }
 
-  // ---------- Section: Settings Backups ----------
-  //
-  // Every time Save as Default writes to localStorage, the prior config
-  // gets snapshotted into aeConfigBackups (last 20 auto-rotated). This
-  // section lists those backups and lets you load one into the working
-  // copy so you can recover from an accidental overwrite.
-
-  function parseBackupEntry(entry) {
-    try {
-      const parsed = JSON.parse(entry.raw);
-      return parsed.config || parsed;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function renderBackups() {
-    const backups = (window.aeConfig.loadBackups() || []).slice().reverse(); // most recent first
-    if (!backups.length) {
-      return `
-        <p class="ae-settings-help">
-          No backups found in this browser. Backups are created automatically each
-          time you click <strong>Save as Default</strong>; the previous saved
-          config is rotated into a history of up to 20 entries.
-        </p>`;
-    }
-
-    const rows = backups.map((entry, idx) => {
-      const cfg = parseBackupEntry(entry);
-      const ts = entry.timestamp ? new Date(entry.timestamp) : null;
-      const when = ts && !isNaN(ts) ? ts.toLocaleString() : (entry.timestamp || 'unknown time');
-      const flagCount = cfg && Array.isArray(cfg.regulatoryFlags) ? cfg.regulatoryFlags.length : '—';
-      const minFee = cfg && typeof cfg.architectMinimumFee === 'number' ? `$${cfg.architectMinimumFee.toLocaleString('en-US')}` : '—';
-      const scheduleFactor = cfg && cfg.feeSchedule && cfg.feeSchedule.factor != null
-        ? cfg.feeSchedule.factor.toFixed(2) : '—';
-      const curveSm = cfg && cfg.sizeCurve && cfg.sizeCurve.small && cfg.sizeCurve.small.multiplier != null
-        ? cfg.sizeCurve.small.multiplier.toFixed(2) : '—';
-      return `
-        <div class="ae-backup-row" data-backup-idx="${idx}">
-          <div class="ae-backup-meta">
-            <div class="ae-backup-time"><strong>${escapeHtml(when)}</strong></div>
-            <div class="ae-backup-summary">
-              ${flagCount} flags · Schedule factor ${escapeHtml(scheduleFactor)} · Min fee ${escapeHtml(minFee)} · Size curve small ×${escapeHtml(curveSm)}
-            </div>
-          </div>
-          <button class="btn btn-secondary ae-backup-restore" data-backup-idx="${idx}" ${cfg ? '' : 'disabled'}>
-            ${cfg ? 'Load into working copy' : 'Corrupt'}
-          </button>
-        </div>`;
-    }).join('');
-
-    return `
-      <p class="ae-settings-help">
-        Each entry is a snapshot of your saved defaults from before a
-        <strong>Save as Default</strong>. Click <strong>Load into working copy</strong>
-        to bring a snapshot back into the modal — then click <strong>Save as Default</strong>
-        at the bottom to persist it. The modal will not auto-save; you can browse
-        other sections after loading to verify before committing.
-      </p>
-      <div class="ae-backups-list">${rows}</div>`;
-  }
-
-  function bindBackups() {
-    const backups = (window.aeConfig.loadBackups() || []).slice().reverse();
-    document.querySelectorAll('.ae-backup-restore').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.backupIdx);
-        const entry = backups[idx];
-        if (!entry) return;
-        const cfg = parseBackupEntry(entry);
-        if (!cfg) { alert('Could not parse this backup.'); return; }
-        if (!confirm('Load this backup into the working copy? Your current working copy will be replaced. You will still need to click Save as Default to persist it.')) return;
-        workingCopy = window.aeConfig.deepClone(cfg);
-        renderSectionBody();
-      });
-    });
-  }
+  // Settings Backups section removed — config is shipped-only now, there
+  // are no user-writable saves to back up.
 
   // ---------- Settings export / import ----------
 
