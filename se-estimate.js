@@ -8,28 +8,43 @@
     { value: 'mostly_locked', label: 'Mostly Locked (minor coordination)' },
     { value: 'fluid',         label: 'Fluid (early design assist)' },
   ];
+  // Complexity factors scale only the parts of the calc they touch:
+  //   gravity factor → framing + P&B + roof + non-lateral modifiers
+  //   lateral factor → lateral hours
+  // Foundation and concrete details are left alone (they're already
+  // per-event counted, and unusual foundation complexity on e.g. PEMB
+  // is captured via extra major-concrete-details rather than here).
   const GRAVITY_SYSTEM_OPTIONS = [
-    { value: 'light_wood_framing',  label: 'Light Wood Framing' },
-    { value: 'heavy_timber',        label: 'Heavy Timber / Mass Timber' },
-    { value: 'cold_formed_steel',   label: 'Cold-Formed Steel Framing' },
-    { value: 'structural_steel',    label: 'Structural Steel Framing' },
-    { value: 'concrete_framing',    label: 'Concrete Framing' },
-    { value: 'precast_tilt_up',     label: 'Precast / Tilt-Up Concrete' },
-    { value: 'masonry_cmu',         label: 'Masonry / CMU Bearing Wall' },
-    { value: 'pemb',                label: 'PEMB / Metal Building System' },
-    { value: 'hybrid_gravity',      label: 'Hybrid / Mixed Gravity System' },
+    { value: 'light_wood_framing',  label: 'Light Wood Framing',             factor: 1.00 },
+    { value: 'heavy_timber',        label: 'Heavy Timber / Mass Timber',     factor: 1.40 },
+    { value: 'cold_formed_steel',   label: 'Cold-Formed Steel Framing',      factor: 1.30 },
+    { value: 'structural_steel',    label: 'Structural Steel Framing',       factor: 1.40 },
+    { value: 'concrete_framing',    label: 'Concrete Framing',               factor: 1.50 },
+    { value: 'precast_tilt_up',     label: 'Precast / Tilt-Up Concrete',     factor: 1.45 },
+    { value: 'masonry_cmu',         label: 'Masonry / CMU Bearing Wall',     factor: 1.30 },
+    { value: 'pemb',                label: 'PEMB / Metal Building System',   factor: 0.70 },
+    { value: 'hybrid_gravity',      label: 'Hybrid / Mixed Gravity System',  factor: 1.50 },
   ];
   const LATERAL_SYSTEM_OPTIONS = [
-    { value: 'wood_shear_wall',     label: 'Wood Braced Wall / Wood Shear Wall' },
-    { value: 'cfs_shear_wall',      label: 'Cold-Formed Steel Shear Wall / Strap Bracing' },
-    { value: 'steel_moment_frame',  label: 'Steel Moment Frame / Portal Frame' },
-    { value: 'steel_braced_frame',  label: 'Steel Braced Frame' },
-    { value: 'concrete_shear_wall', label: 'Concrete Shear Wall / Core' },
-    { value: 'masonry_shear_wall',  label: 'Masonry / CMU Shear Wall' },
-    { value: 'tilt_up_shear_wall',  label: 'Tilt-Up / Precast Concrete Shear Wall' },
-    { value: 'diaphragm_collector', label: 'Diaphragm / Collector-Heavy System' },
-    { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System' },
+    { value: 'wood_shear_wall',     label: 'Wood Braced Wall / Wood Shear Wall',         factor: 1.00 },
+    { value: 'cfs_shear_wall',      label: 'Cold-Formed Steel Shear Wall / Strap Bracing', factor: 1.25 },
+    { value: 'steel_moment_frame',  label: 'Steel Moment Frame / Portal Frame',          factor: 1.45 },
+    { value: 'steel_braced_frame',  label: 'Steel Braced Frame',                         factor: 1.30 },
+    { value: 'concrete_shear_wall', label: 'Concrete Shear Wall / Core',                 factor: 1.45 },
+    { value: 'masonry_shear_wall',  label: 'Masonry / CMU Shear Wall',                   factor: 1.35 },
+    { value: 'tilt_up_shear_wall',  label: 'Tilt-Up / Precast Concrete Shear Wall',      factor: 1.40 },
+    { value: 'diaphragm_collector', label: 'Diaphragm / Collector-Heavy System',         factor: 1.50 },
+    { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System',              factor: 1.60 },
   ];
+
+  function gravityFactorFor(value) {
+    const o = GRAVITY_SYSTEM_OPTIONS.find((x) => x.value === value);
+    return o ? o.factor : 1.0;
+  }
+  function lateralFactorFor(value) {
+    const o = LATERAL_SYSTEM_OPTIONS.find((x) => x.value === value);
+    return o ? o.factor : 1.0;
+  }
   const FOUNDATION_TYPE_OPTIONS = [
     { value: 'slab_on_grade', label: 'Slab-on-grade' },
     { value: 'pier_beam',     label: 'Pier and beam' },
@@ -935,12 +950,41 @@
     const modParts = [discHours, span16Hours, spanOver24Hours, vaultHours, plateHours, voidHours, cantileverHours, specialtyHours, lateralHours].map(formatNum).join(' + ');
     work.push({ label: 'Modifier Hours Total', detail: modParts, value: formatNum(modifierHours) + ' hrs', bold: true });
 
-    work.push({ heading: 'Step 5: Raw Work' });
+    // ----- Step 5: System Complexity Factors -----
+    // Gravity factor scales framing + P&B + roof + non-lateral modifiers.
+    // Lateral factor scales lateral hours only. Foundation and concrete
+    // details are left at their raw per-event values (foundation because
+    // it scales with its own inputs regardless of superstructure; concrete
+    // because unusual thrust-tie / deep-pier complexity is captured via
+    // extra major-concrete-detail counts rather than the system factor).
+    work.push({ heading: 'Step 5: System Complexity Factors' });
 
-    const rawWorkHours = baseHours + modifierHours;
-    work.push({ label: 'Raw Work', detail: `Base ${formatNum(baseHours)} + Modifiers ${formatNum(modifierHours)}`, value: formatNum(rawWorkHours) + ' hrs', bold: true });
+    const a = state.assumptions || {};
+    const gravFactor = gravityFactorFor(a.gravitySystem);
+    const latFactor  = lateralFactorFor(a.lateralSystem);
 
-    work.push({ heading: 'Step 6: Setup & Standard Coordination' });
+    const nonLateralModifiers = discHours + span16Hours + spanOver24Hours
+      + vaultHours + plateHours + voidHours + cantileverHours + specialtyHours;
+
+    const gravityScope = framingSquareHours + pierAndBeamHours + roofHours + nonLateralModifiers;
+    const adjustedGravity = gravityScope * gravFactor;
+    const adjustedLateral = lateralHours * latFactor;
+
+    const gravityLabel = labelFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
+    const lateralLabel = labelFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
+
+    work.push({ label: 'Gravity system', detail: gravityLabel, value: '×' + gravFactor.toFixed(2) });
+    work.push({ label: 'Gravity scope', detail: `framing ${formatNum(framingSquareHours)} + P&B ${formatNum(pierAndBeamHours)} + roof ${formatNum(roofHours)} + mods ${formatNum(nonLateralModifiers)} = ${formatNum(gravityScope)} × ${gravFactor.toFixed(2)}`, value: formatNum(adjustedGravity) + ' hrs' });
+    work.push({ label: 'Lateral system', detail: lateralLabel, value: '×' + latFactor.toFixed(2) });
+    work.push({ label: 'Lateral (factored)', detail: `${formatNum(lateralHours)} × ${latFactor.toFixed(2)}`, value: formatNum(adjustedLateral) + ' hrs' });
+
+    // ----- Step 6: Raw Work -----
+    work.push({ heading: 'Step 6: Raw Work' });
+
+    const rawWorkHours = foundationHours + concreteHours + adjustedGravity + adjustedLateral;
+    work.push({ label: 'Raw Work', detail: `Foundation ${formatNum(foundationHours)} + Concrete ${formatNum(concreteHours)} + Gravity (factored) ${formatNum(adjustedGravity)} + Lateral (factored) ${formatNum(adjustedLateral)}`, value: formatNum(rawWorkHours) + ' hrs', bold: true });
+
+    work.push({ heading: 'Step 7: Setup & Standard Coordination' });
 
     // Setup scales with the modeling-related portion of raw work only
     // (foundation + framing + P&B + roof). Concrete details and modifiers
@@ -962,7 +1006,7 @@
     work.push({ label: 'Coord multiplier', detail: `${formatNum(state.squareFootage)} sf × 0.00001 + 1 = ${formatNum(coordinationMultiplier)}`, value: '×' + formatNum(coordinationMultiplier) });
     work.push({ label: 'Standard coordination', detail: `(10% × ${formatNum(coordinationMultiplier)}) × ${formatNum(rawWorkHours)} raw = ${(coordinationPct * 100).toFixed(1)}% × raw`, value: formatNum(coordinationHours) + ' hrs' });
 
-    work.push({ heading: 'Step 7: Sealed Structural Set' });
+    work.push({ heading: 'Step 8: Sealed Structural Set' });
     const totalHours = rawWorkHours + setupHours + coordinationHours;
     work.push({ label: 'Sealed Set Hours', detail: `${formatNum(rawWorkHours)} raw + ${formatNum(setupHours)} setup + ${formatNum(coordinationHours)} coord`, value: formatNum(totalHours) + ' hrs', bold: true });
 
