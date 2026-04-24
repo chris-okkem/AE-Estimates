@@ -169,9 +169,8 @@
   }
 
   function normalizeConfig(cfg) {
-    if (typeof cfg.builderBaseConditionedSf !== 'number' || cfg.builderBaseConditionedSf <= 0) {
-      cfg.builderBaseConditionedSf = 140;
-    }
+    // Build grade $/sf values are hardcoded now — drop the legacy knob.
+    delete cfg.builderBaseConditionedSf;
     // Drop legacy per-grade tables — derived now.
     delete cfg.buildGrades;
     delete cfg.buildGradeLabels;
@@ -211,7 +210,7 @@
 
   function calculate(s, cfg) {
     // Stage 1
-    const grades = window.aeConfig.deriveBuildGrades(cfg.builderBaseConditionedSf);
+    const grades = window.aeConfig.deriveBuildGrades();
     const grade = grades[s.program.buildGrade] || grades.mid_custom;
     const baseline = { conditioned: grade.conditioned, unconditioned: grade.unconditioned };
 
@@ -620,7 +619,7 @@
             <label for="aeBuildGrade">Build Grade</label>
             <select id="aeBuildGrade">
               ${(() => {
-                const grades = window.aeConfig.deriveBuildGrades(cfg.builderBaseConditionedSf);
+                const grades = window.aeConfig.deriveBuildGrades();
                 const labels = window.aeConfig.BUILD_GRADE_LABELS;
                 return window.aeConfig.BUILD_GRADE_KEYS.map((g) => {
                   const r = grades[g];
@@ -657,7 +656,7 @@
         <div class="form-row">
           <div class="form-group">
             <label for="aeRegionalMultiplier">Regional Multiplier <span class="ae-calc-hint">city/region cost adjustment vs national average (1.00 = US avg)</span></label>
-            <input type="number" id="aeRegionalMultiplier" min="0" step="0.05" value="${(p.regionalMultiplier != null ? p.regionalMultiplier : 1.00)}">
+            <input type="number" id="aeRegionalMultiplier" min="0" step="0.05" value="${(p.regionalMultiplier != null ? p.regionalMultiplier : 1.15)}">
           </div>
         </div>
         <p class="help-text">Break the project into areas (e.g., "Existing house", "Addition", "ADU"). Totals roll into the calculation; area names and type are organizational only. <strong>Cond spaces</strong>: named rooms inside the thermal envelope. <strong>Uncond spaces</strong>: garages, porches, covered outdoor areas.</p>
@@ -920,7 +919,7 @@
     attachSelect('aeStructuralComplexity', (v) => { state.program.structuralComplexity = v; render(); });
     attachSelect('aeBuildingCategory', (v) => { state.program.buildingCategory = v; render(); });
     attachSelect('aeProjectComplexity', (v) => { state.program.projectComplexity = v; render(); });
-    attachNumber('aeRegionalMultiplier', (v) => { state.program.regionalMultiplier = v > 0 ? v : 1.0; render(); });
+    attachNumber('aeRegionalMultiplier', (v) => { state.program.regionalMultiplier = v > 0 ? v : 1.15; render(); });
 
     // Stage 1 overrides (empty string clears the override)
     attachNumberOrClear('aeCondRateOverride',   (v) => { state.stage1Overrides.conditionedRate = v; render(); });

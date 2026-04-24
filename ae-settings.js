@@ -25,7 +25,6 @@ window.aeSettings = (function () {
 
   const SECTIONS = [
     { id: 'rates',       label: 'Default Hourly Rates',  render: () => renderRates(),       bind: () => bindRates() },
-    { id: 'grades',      label: 'Build Grades',          render: () => renderGrades(),      bind: () => bindGrades() },
     { id: 'struct-mult', label: 'Structural Multipliers', render: () => renderStructMult(), bind: () => bindStructMult() },
     { id: 'size-curve',  label: 'Size Curve',            render: () => renderSizeCurve(),   bind: () => bindSizeCurve() },
     { id: 'density',     label: 'Density Curves',        render: () => renderDensityCurves(), bind: () => bindDensityCurves() },
@@ -218,69 +217,10 @@ window.aeSettings = (function () {
     });
   }
 
-  // ---------- Section: Build Grades ----------
-  //
-  // The user only sets the Builder Grade conditioned base $/sf. All other
-  // grade rates derive via hardcoded ratios + markup stack (see
-  // aeConfig.deriveBuildGrades). Regional adjustment lives on the estimate
-  // side as a per-project input, not here.
-
-  function renderGrades() {
-    const builderBase = workingCopy.builderBaseConditionedSf;
-    const grades = window.aeConfig.deriveBuildGrades(builderBase);
-    const labels = window.aeConfig.BUILD_GRADE_LABELS;
-    return `
-      <p class="ae-settings-help">
-        Set the <strong>Builder Grade conditioned base $/sf</strong>. This is an RSMeans-style Economy hard cost — labor + materials only, national average, excluding GC overhead and profit. Every other grade and the unconditioned area rates derive from this single value via fixed ratios and a markup stack.
-      </p>
-      <div class="ae-settings-table">
-        <div class="ae-settings-table-row ae-ss-row">
-          <span class="ae-settings-row-label">Builder Grade conditioned base $/sf</span>
-          <input type="number" class="ae-settings-input" id="aeBuilderBase" min="1" step="1" value="${builderBase}">
-          <span class="ae-settings-help-inline">national avg, hard cost only</span>
-        </div>
-      </div>
-      <h4 style="margin-top:1rem;">Derived rates (read-only)</h4>
-      <p class="ae-settings-help" style="margin-bottom:0.5rem;">
-        For each grade: base = builder base × ratio; cond $/sf = base × markup; uncond $/sf = cond × ${window.aeConfig.UNCONDITIONED_RATIO}.
-      </p>
-      <div class="ae-settings-table" id="aeGradesPreview">
-        ${renderGradesPreviewBody(grades, labels)}
-      </div>
-    `;
-  }
-
-  function renderGradesPreviewBody(grades, labels) {
-    return `
-      <div class="ae-settings-table-row ae-grade-preview-row ae-settings-table-head">
-        <span>Grade</span><span>Ratio</span><span>Markup</span><span>Cond $/sf</span><span>Uncond $/sf</span>
-      </div>
-      ${window.aeConfig.BUILD_GRADE_KEYS.map((k) => {
-        const r = grades[k];
-        return `
-          <div class="ae-settings-table-row ae-grade-preview-row">
-            <span class="ae-settings-row-label">${escapeHtml(labels[k] || k)}</span>
-            <span>${r.ratio.toFixed(2)}×</span>
-            <span>${r.markup.toFixed(2)}×</span>
-            <span>$${Math.round(r.conditioned).toLocaleString()}</span>
-            <span>$${Math.round(r.unconditioned).toLocaleString()}</span>
-          </div>
-        `;
-      }).join('')}
-    `;
-  }
-
-  function bindGrades() {
-    const el = document.getElementById('aeBuilderBase');
-    if (!el) return;
-    el.addEventListener('input', () => {
-      const v = parseFloat(el.value);
-      workingCopy.builderBaseConditionedSf = isFinite(v) && v > 0 ? v : 140;
-      const grades = window.aeConfig.deriveBuildGrades(workingCopy.builderBaseConditionedSf);
-      const preview = document.getElementById('aeGradesPreview');
-      if (preview) preview.innerHTML = renderGradesPreviewBody(grades, window.aeConfig.BUILD_GRADE_LABELS);
-    });
-  }
+  // Build Grades section removed — $/sf values are hardcoded in ae-config.js
+  // (BUILD_GRADE_CONDITIONED). They show up in the estimate form's Build
+  // Grade dropdown automatically. Regional adjustment still lives on the
+  // estimate side as a per-project input.
 
   // ---------- Section: Structural Multipliers ----------
 
@@ -917,8 +857,9 @@ window.aeSettings = (function () {
       const ts = entry.timestamp ? new Date(entry.timestamp) : null;
       const when = ts && !isNaN(ts) ? ts.toLocaleString() : (entry.timestamp || 'unknown time');
       const flagCount = cfg && Array.isArray(cfg.regulatoryFlags) ? cfg.regulatoryFlags.length : '—';
-      const builderBase = cfg && typeof cfg.builderBaseConditionedSf === 'number' ? `$${cfg.builderBaseConditionedSf}/sf` : '—';
       const minFee = cfg && typeof cfg.architectMinimumFee === 'number' ? `$${cfg.architectMinimumFee.toLocaleString('en-US')}` : '—';
+      const scheduleFactor = cfg && cfg.feeSchedule && cfg.feeSchedule.factor != null
+        ? cfg.feeSchedule.factor.toFixed(2) : '—';
       const curveSm = cfg && cfg.sizeCurve && cfg.sizeCurve.small && cfg.sizeCurve.small.multiplier != null
         ? cfg.sizeCurve.small.multiplier.toFixed(2) : '—';
       return `
@@ -926,7 +867,7 @@ window.aeSettings = (function () {
           <div class="ae-backup-meta">
             <div class="ae-backup-time"><strong>${escapeHtml(when)}</strong></div>
             <div class="ae-backup-summary">
-              ${flagCount} flags · Builder base ${escapeHtml(builderBase)} · Min fee ${escapeHtml(minFee)} · Size curve small ×${escapeHtml(curveSm)}
+              ${flagCount} flags · Schedule factor ${escapeHtml(scheduleFactor)} · Min fee ${escapeHtml(minFee)} · Size curve small ×${escapeHtml(curveSm)}
             </div>
           </div>
           <button class="btn btn-secondary ae-backup-restore" data-backup-idx="${idx}" ${cfg ? '' : 'disabled'}>

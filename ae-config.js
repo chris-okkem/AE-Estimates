@@ -27,12 +27,9 @@ window.aeConfig = (function () {
       structural_ca: 190,
       additional_services_default: 142,
     },
-    // The user only sets the Builder Grade conditioned base $/sf.
-    // All other grade rates derive via hardcoded ratios + markup stack
-    // (see deriveBuildGrades below). Represents an RSMeans-style Economy
-    // hard cost (labor + materials only, national average, excluding GC
-    // overhead and profit).
-    builderBaseConditionedSf: 200,
+    // Build grade $/sf values are hardcoded in BUILD_GRADE_CONDITIONED
+    // (see deriveBuildGrades below). No config knob — the estimate-side
+    // regional multiplier handles market variation.
     structuralComplexityLabels: { low: 'Low', medium: 'Medium', high: 'High' },
     structuralMultipliers: {
       stage1: { low: 0.75, medium: 1.0, high: 1.25 },
@@ -151,27 +148,27 @@ window.aeConfig = (function () {
     luxury: 'Luxury',
     ultra: 'Ultra',
   };
-  const GRADE_RATIOS = {       // applied to builder base to get each grade's base conditioned $/sf
-    builder: 1.00, mid_custom: 1.40, high_custom: 1.90, luxury: 2.60, ultra: 3.75,
-  };
-  const MARKUP_STACK = {       // GC overhead + profit per grade
-    builder: 1.17, mid_custom: 1.20, high_custom: 1.23, luxury: 1.25, ultra: 1.28,
-  };
+  // Hardcoded national-average residential construction $/sf including
+  // builder overhead and profit. Regional variation is handled by
+  // state.program.regionalMultiplier (not baked into these numbers).
+  // Unconditioned spaces (garages, covered porches, etc.) cost less;
+  // kept as a 0.54 ratio of conditioned per grade.
   const UNCONDITIONED_RATIO = 0.54;
+  const BUILD_GRADE_CONDITIONED = {
+    builder:     150,
+    mid_custom:  200,
+    high_custom: 300,
+    luxury:      450,
+    ultra:       675,
+  };
 
-  function deriveBuildGrades(builderBase) {
-    const base = isFinite(builderBase) && builderBase > 0 ? builderBase : 140;
+  function deriveBuildGrades() {
     const out = {};
     BUILD_GRADE_KEYS.forEach((k) => {
-      const baseCond = base * GRADE_RATIOS[k];
-      const finalCond = baseCond * MARKUP_STACK[k];
-      const finalUncond = finalCond * UNCONDITIONED_RATIO;
+      const cond = BUILD_GRADE_CONDITIONED[k];
       out[k] = {
-        baseConditioned: baseCond,
-        conditioned: finalCond,
-        unconditioned: finalUncond,
-        ratio: GRADE_RATIOS[k],
-        markup: MARKUP_STACK[k],
+        conditioned: cond,
+        unconditioned: cond * UNCONDITIONED_RATIO,
       };
     });
     return out;
@@ -333,8 +330,7 @@ window.aeConfig = (function () {
     deepClone,
     BUILD_GRADE_KEYS,
     BUILD_GRADE_LABELS,
-    GRADE_RATIOS,
-    MARKUP_STACK,
+    BUILD_GRADE_CONDITIONED,
     UNCONDITIONED_RATIO,
     SIZE_CURVE_FLOOR,
     deriveBuildGrades,
