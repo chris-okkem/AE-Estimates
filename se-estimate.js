@@ -1052,7 +1052,14 @@
           <button class="btn btn-email" id="btnExport">Export Estimate</button>
         </div>
       </div>
-      <h2>Detailed Breakdown</h2>
+      `;
+
+    // Fee Estimate (line items) shows first — this is the actionable
+    // output the user adjusts before producing a proposal. The calc
+    // breakdown that produced Sealed Set follows below for reference.
+    html += renderLineItemsTable();
+
+    html += `<h2>Detailed Breakdown</h2>
       <table class="line-items">
         <thead><tr><th>Item</th><th>Calculation</th><th class="amount">Result</th></tr></thead>
         <tbody>`;
@@ -1069,7 +1076,6 @@
     });
 
     html += `</tbody></table>`;
-    html += renderLineItemsTable();
     html += `</div>`;
     outputDiv.innerHTML = html;
 
