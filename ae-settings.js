@@ -37,6 +37,7 @@ window.aeSettings = (function () {
     { id: 'min-fee',     label: 'Architect Minimum Fee', render: () => renderMinFee(),      bind: () => bindMinFee() },
     { id: 'city',        label: 'City Comments Base %',  render: () => renderCity(),        bind: () => bindCity() },
     { id: 'flags',       label: 'Regulatory Flags',      render: () => renderFlags(),       bind: () => bindFlags() },
+    { id: 'backups',     label: 'Settings Backups',      render: () => renderBackups(),     bind: () => bindBackups() },
   ];
 
   // ---------- Public open ----------
@@ -876,6 +877,83 @@ window.aeSettings = (function () {
         renderSectionBody();
       });
     }
+  }
+
+  // ---------- Section: Settings Backups ----------
+  //
+  // Every time Save as Default writes to localStorage, the prior config
+  // gets snapshotted into aeConfigBackups (last 20 auto-rotated). This
+  // section lists those backups and lets you load one into the working
+  // copy so you can recover from an accidental overwrite.
+
+  function parseBackupEntry(entry) {
+    try {
+      const parsed = JSON.parse(entry.raw);
+      return parsed.config || parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function renderBackups() {
+    const backups = (window.aeConfig.loadBackups() || []).slice().reverse(); // most recent first
+    if (!backups.length) {
+      return `
+        <p class="ae-settings-help">
+          No backups found in this browser. Backups are created automatically each
+          time you click <strong>Save as Default</strong>; the previous saved
+          config is rotated into a history of up to 20 entries.
+        </p>`;
+    }
+
+    const rows = backups.map((entry, idx) => {
+      const cfg = parseBackupEntry(entry);
+      const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+      const when = ts && !isNaN(ts) ? ts.toLocaleString() : (entry.timestamp || 'unknown time');
+      const flagCount = cfg && Array.isArray(cfg.regulatoryFlags) ? cfg.regulatoryFlags.length : '—';
+      const builderBase = cfg && typeof cfg.builderBaseConditionedSf === 'number' ? `$${cfg.builderBaseConditionedSf}/sf` : '—';
+      const minFee = cfg && typeof cfg.architectMinimumFee === 'number' ? `$${cfg.architectMinimumFee.toLocaleString('en-US')}` : '—';
+      const curveSm = cfg && cfg.sizeCurve && cfg.sizeCurve.small && cfg.sizeCurve.small.multiplier != null
+        ? cfg.sizeCurve.small.multiplier.toFixed(2) : '—';
+      return `
+        <div class="ae-backup-row" data-backup-idx="${idx}">
+          <div class="ae-backup-meta">
+            <div class="ae-backup-time"><strong>${escapeHtml(when)}</strong></div>
+            <div class="ae-backup-summary">
+              ${flagCount} flags · Builder base ${escapeHtml(builderBase)} · Min fee ${escapeHtml(minFee)} · Size curve small ×${escapeHtml(curveSm)}
+            </div>
+          </div>
+          <button class="btn btn-secondary ae-backup-restore" data-backup-idx="${idx}" ${cfg ? '' : 'disabled'}>
+            ${cfg ? 'Load into working copy' : 'Corrupt'}
+          </button>
+        </div>`;
+    }).join('');
+
+    return `
+      <p class="ae-settings-help">
+        Each entry is a snapshot of your saved defaults from before a
+        <strong>Save as Default</strong>. Click <strong>Load into working copy</strong>
+        to bring a snapshot back into the modal — then click <strong>Save as Default</strong>
+        at the bottom to persist it. The modal will not auto-save; you can browse
+        other sections after loading to verify before committing.
+      </p>
+      <div class="ae-backups-list">${rows}</div>`;
+  }
+
+  function bindBackups() {
+    const backups = (window.aeConfig.loadBackups() || []).slice().reverse();
+    document.querySelectorAll('.ae-backup-restore').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.backupIdx);
+        const entry = backups[idx];
+        if (!entry) return;
+        const cfg = parseBackupEntry(entry);
+        if (!cfg) { alert('Could not parse this backup.'); return; }
+        if (!confirm('Load this backup into the working copy? Your current working copy will be replaced. You will still need to click Save as Default to persist it.')) return;
+        workingCopy = window.aeConfig.deepClone(cfg);
+        renderSectionBody();
+      });
+    });
   }
 
   // ---------- Settings export / import ----------
