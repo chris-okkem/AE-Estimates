@@ -31,14 +31,8 @@
     { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System' },
   ];
   const FOUNDATION_TYPE_OPTIONS = [
-    { value: 'slab_on_grade',  label: 'Slab-on-grade' },
-    { value: 'post_tensioned', label: 'Post-tensioned slab' },
-    { value: 'pier_beam',      label: 'Pier and beam' },
-    { value: 'drilled_piers',  label: 'Drilled piers + grade beams' },
-    { value: 'helical_piers',  label: 'Helical piers' },
-    { value: 'basement',       label: 'Basement' },
-    { value: 'mat_slab',       label: 'Mat slab' },
-    { value: 'other',          label: 'Other' },
+    { value: 'slab_on_grade', label: 'Slab-on-grade' },
+    { value: 'pier_beam',     label: 'Pier and beam' },
   ];
   const GEOTECH_REPORT_OPTIONS = [
     { value: 'provided',            label: 'Provided' },
@@ -1014,6 +1008,14 @@
     // gravitySystem + lateralSystem dropdowns. Drop the old value; the
     // defaults from base.assumptions apply.
     delete merged.assumptions.structuralSystem;
+    // Foundation type list was trimmed to just slab-on-grade and pier-and-
+    // beam. Anything else (drilled piers, helical, basement, etc.) maps to
+    // slab-on-grade; the specialty complexity lives in concrete details
+    // and specialty-details rather than the dropdown.
+    const validFoundationTypes = new Set(FOUNDATION_TYPE_OPTIONS.map((o) => o.value));
+    if (!validFoundationTypes.has(merged.assumptions.foundationType)) {
+      merged.assumptions.foundationType = 'slab_on_grade';
+    }
     // Backfill any missing line items so older saves render the new UI.
     const seedLines = makeInitialLineItems();
     if (!merged.lineItems || typeof merged.lineItems !== 'object') merged.lineItems = {};
