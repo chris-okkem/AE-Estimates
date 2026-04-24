@@ -8,16 +8,27 @@
     { value: 'mostly_locked', label: 'Mostly Locked (minor coordination)' },
     { value: 'fluid',         label: 'Fluid (early design assist)' },
   ];
-  const STRUCTURAL_SYSTEM_OPTIONS = [
-    { value: 'wood_framing',   label: 'Light-frame wood' },
-    { value: 'wood_steel',     label: 'Light-frame wood + structural steel' },
-    { value: 'cfs_steel',      label: 'Cold-formed steel + structural steel' },
-    { value: 'steel_cfs',      label: 'Structural steel + cold-formed steel' },
-    { value: 'masonry',        label: 'Masonry (CMU)' },
-    { value: 'icf',            label: 'Insulated concrete forms (ICF)' },
-    { value: 'cast_in_place',  label: 'Cast-in-place concrete' },
-    { value: 'tilt_up',        label: 'Tilt-up concrete' },
-    { value: 'hybrid_other',   label: 'Hybrid / other' },
+  const GRAVITY_SYSTEM_OPTIONS = [
+    { value: 'light_wood_framing',  label: 'Light Wood Framing' },
+    { value: 'heavy_timber',        label: 'Heavy Timber / Mass Timber' },
+    { value: 'cold_formed_steel',   label: 'Cold-Formed Steel Framing' },
+    { value: 'structural_steel',    label: 'Structural Steel Framing' },
+    { value: 'concrete_framing',    label: 'Concrete Framing' },
+    { value: 'precast_tilt_up',     label: 'Precast / Tilt-Up Concrete' },
+    { value: 'masonry_cmu',         label: 'Masonry / CMU Bearing Wall' },
+    { value: 'pemb',                label: 'PEMB / Metal Building System' },
+    { value: 'hybrid_gravity',      label: 'Hybrid / Mixed Gravity System' },
+  ];
+  const LATERAL_SYSTEM_OPTIONS = [
+    { value: 'wood_shear_wall',     label: 'Wood Braced Wall / Wood Shear Wall' },
+    { value: 'cfs_shear_wall',      label: 'Cold-Formed Steel Shear Wall / Strap Bracing' },
+    { value: 'steel_moment_frame',  label: 'Steel Moment Frame / Portal Frame' },
+    { value: 'steel_braced_frame',  label: 'Steel Braced Frame' },
+    { value: 'concrete_shear_wall', label: 'Concrete Shear Wall / Core' },
+    { value: 'masonry_shear_wall',  label: 'Masonry / CMU Shear Wall' },
+    { value: 'tilt_up_shear_wall',  label: 'Tilt-Up / Precast Concrete Shear Wall' },
+    { value: 'diaphragm_collector', label: 'Diaphragm / Collector-Heavy System' },
+    { value: 'hybrid_lateral',      label: 'Hybrid / Mixed Lateral System' },
   ];
   const FOUNDATION_TYPE_OPTIONS = [
     { value: 'slab_on_grade',  label: 'Slab-on-grade' },
@@ -69,7 +80,8 @@
       structuresScope: [],
       assumptions: {
         designStability: 'mostly_locked',
-        structuralSystem: 'wood_framing',
+        gravitySystem: 'light_wood_framing',
+        lateralSystem: 'wood_shear_wall',
         foundationType: 'slab_on_grade',
         geotechReport: 'to_be_provided',
       },
@@ -181,9 +193,15 @@
               </select>
             </div>
             <div class="form-group" style="flex:1">
-              <label for="structuralSystem">Structural System</label>
-              <select id="structuralSystem">
-                ${STRUCTURAL_SYSTEM_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.structuralSystem === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              <label for="gravitySystem">Gravity System</label>
+              <select id="gravitySystem">
+                ${GRAVITY_SYSTEM_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.gravitySystem === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label for="lateralSystem">Lateral System</label>
+              <select id="lateralSystem">
+                ${LATERAL_SYSTEM_OPTIONS.map((o) => `<option value="${o.value}" ${state.assumptions.lateralSystem === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -684,14 +702,16 @@
     });
 
     if (!state.assumptions) state.assumptions = {};
-    const designStabilityEl  = document.getElementById('designStability');
-    const structuralSystemEl = document.getElementById('structuralSystem');
-    const foundationTypeEl   = document.getElementById('foundationType');
-    const geotechReportEl    = document.getElementById('geotechReport');
-    if (designStabilityEl)  state.assumptions.designStability  = designStabilityEl.value;
-    if (structuralSystemEl) state.assumptions.structuralSystem = structuralSystemEl.value;
-    if (foundationTypeEl)   state.assumptions.foundationType   = foundationTypeEl.value;
-    if (geotechReportEl)    state.assumptions.geotechReport    = geotechReportEl.value;
+    const designStabilityEl = document.getElementById('designStability');
+    const gravitySystemEl   = document.getElementById('gravitySystem');
+    const lateralSystemEl   = document.getElementById('lateralSystem');
+    const foundationTypeEl  = document.getElementById('foundationType');
+    const geotechReportEl   = document.getElementById('geotechReport');
+    if (designStabilityEl) state.assumptions.designStability = designStabilityEl.value;
+    if (gravitySystemEl)   state.assumptions.gravitySystem   = gravitySystemEl.value;
+    if (lateralSystemEl)   state.assumptions.lateralSystem   = lateralSystemEl.value;
+    if (foundationTypeEl)  state.assumptions.foundationType  = foundationTypeEl.value;
+    if (geotechReportEl)   state.assumptions.geotechReport   = geotechReportEl.value;
 
     state.stories = parseInt(document.getElementById('stories').value) || 1;
 
@@ -990,6 +1010,10 @@
     }
     delete merged.notes;
     merged.assumptions = Object.assign({}, base.assumptions, merged.assumptions || {});
+    // Legacy structuralSystem field is retired — replaced by two separate
+    // gravitySystem + lateralSystem dropdowns. Drop the old value; the
+    // defaults from base.assumptions apply.
+    delete merged.assumptions.structuralSystem;
     // Backfill any missing line items so older saves render the new UI.
     const seedLines = makeInitialLineItems();
     if (!merged.lineItems || typeof merged.lineItems !== 'object') merged.lineItems = {};
@@ -1581,8 +1605,9 @@
 
     const a = state.assumptions || {};
     const designStability = designStabilityPhrase(a.designStability);
-    const structuralSys   = labelFor(STRUCTURAL_SYSTEM_OPTIONS, a.structuralSystem);
-    const foundationType  = labelFor(FOUNDATION_TYPE_OPTIONS,   a.foundationType);
+    const gravitySystem   = labelFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
+    const lateralSystem   = labelFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
+    const foundationType  = labelFor(FOUNDATION_TYPE_OPTIONS, a.foundationType);
     const geotechReport   = labelFor(GEOTECH_REPORT_OPTIONS,    a.geotechReport);
 
     // Multi-row fee table built from the line items the user has set on the
@@ -1657,7 +1682,8 @@
       <p style="${font}"><strong>Project Assumptions</strong></p>
       <ul style="${font}">
         <li style="${font}"><strong>Architectural Design:</strong> ${escapeHtml(designStability)}</li>
-        <li style="${font}"><strong>Structural System:</strong> ${escapeHtml(structuralSys)}.</li>
+        <li style="${font}"><strong>Gravity System:</strong> ${escapeHtml(gravitySystem)}.</li>
+        <li style="${font}"><strong>Lateral System:</strong> ${escapeHtml(lateralSystem)}.</li>
         <li style="${font}"><strong>Foundation Type:</strong> ${escapeHtml(foundationType)}.</li>
         <li style="${font}"><strong>Geotechnical Report:</strong> ${escapeHtml(geotechReport)}.</li>
       </ul>
