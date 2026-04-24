@@ -496,6 +496,108 @@
     return '×' + n.toFixed(3);
   }
 
+  // ---------- Info icon helper ----------
+  //
+  // Wrap any descriptive HTML in a hover-popup. Intended for surfacing
+  // shipped settings values inline on the main estimate form so the user
+  // doesn't have to open the Settings modal to see them.
+  function infoIcon(tipHtml) {
+    const safe = String(tipHtml || '').replace(/"/g, '&quot;');
+    return `<span class="ae-info-icon" data-tip="${safe}" tabindex="0" aria-label="info">ⓘ</span>`;
+  }
+
+  // ---------- Tooltip content builders (read from the current cfg) ----------
+
+  function tipSizeCurve(cfg) {
+    const c = cfg.sizeCurve || {};
+    const rows = ['small', 'standard', 'large'].map((k) => {
+      const a = c[k] || {};
+      const lock = k === 'standard' ? ' (locked)' : '';
+      return `<div>${k}: ${a.position || '—'} sf → ×${(a.multiplier || 0).toFixed(2)}${lock}</div>`;
+    }).join('');
+    return `<strong>Size Curve</strong>
+      ${rows}
+      <div class="ae-tip-note">Small side steepens via progress<sup>1.5</sup>; large side linear; floor ×0.75. Extrapolates past anchors.</div>`;
+  }
+
+  function tipDensityCurves(cfg) {
+    const cd = cfg.conditionedDensityCurve || {};
+    const ud = cfg.unconditionedDensityCurve || {};
+    const row = (name, a, lock) => `<div>${name}: ${a.position} rooms/1ksf → ×${(a.multiplier || 0).toFixed(2)}${lock ? ' (locked)' : ''}</div>`;
+    return `<strong>Density Curves</strong>
+      <div class="ae-tip-sub">Conditioned</div>
+      ${row('sparse', cd.sparse || {}, false)}
+      ${row('standard', cd.standard || {}, true)}
+      ${row('dense', cd.dense || {}, false)}
+      <div class="ae-tip-sub">Unconditioned</div>
+      ${row('sparse', ud.sparse || {}, false)}
+      ${row('standard', ud.standard || {}, true)}
+      ${row('dense', ud.dense || {}, false)}
+      <div class="ae-tip-note">density = spaces ÷ sf × 1000</div>`;
+  }
+
+  function tipPhaseWeights(cfg) {
+    const p = cfg.phaseWeights || {};
+    return `<strong>Phase Weights</strong>
+      <div>Feasibility/Concept: ${((p.feasibilityConcept||0)*100).toFixed(0)}%</div>
+      <div>Schematic Design: ${((p.schematicDesign||0)*100).toFixed(0)}%</div>
+      <div>Design Development: ${((p.designDevelopment||0)*100).toFixed(0)}%</div>
+      <div>Construction Documents: ${((p.constructionDocuments||0)*100).toFixed(0)}%</div>
+      <div>Bidding/Negotiation: ${((p.biddingNegotiation||0)*100).toFixed(0)}%</div>
+      <div>Construction Administration: ${((p.constructionAdministration||0)*100).toFixed(0)}%</div>
+      <div class="ae-tip-note">The 5 post-concept phases sum to 1.00; Feasibility adds 15% on top.</div>`;
+  }
+
+  function tipCdSplits(cfg) {
+    const cd = cfg.cdSubLevelSplit || {};
+    const dd = cfg.designDevelopmentCdSplit || {};
+    const ca = cfg.constructionAdministrationCdSplit || {};
+    const pct = (v) => ((v || 0) * 100).toFixed(0) + '%';
+    return `<strong>CD Splits</strong>
+      <div class="ae-tip-sub">CD dollars: Permit / Bid / Construction</div>
+      <div>${pct(cd.permitSet)} / ${pct(cd.bidSet)} / ${pct(cd.constructionSet)}</div>
+      <div class="ae-tip-sub">DD scaling by CD inclusion</div>
+      <div>${pct(dd.permitSet)} / ${pct(dd.bidSet)} / ${pct(dd.constructionSet)}</div>
+      <div class="ae-tip-sub">CA scaling by CD inclusion</div>
+      <div>${pct(ca.permitSet)} / ${pct(ca.bidSet)} / ${pct(ca.constructionSet)}</div>`;
+  }
+
+  function tipArchitectMinFee(cfg) {
+    const min = cfg.architectMinimumFee || 0;
+    return `<strong>Architect Minimum Fee</strong>
+      <div>Floor: $${min.toLocaleString('en-US')}</div>
+      <div class="ae-tip-note">If the schedule computes a base below this, the base is bumped to the floor before phase distribution. Excluded phases still drop out on top.</div>`;
+  }
+
+  function tipStructuralSettings(cfg) {
+    const s = cfg.structuralSettings || {};
+    return `<strong>Structural Settings</strong>
+      <div>Share of construction: ${((s.share||0)*100).toFixed(0)}%</div>
+      <div>Total rate: ${((s.totalRate||0)*100).toFixed(2)}%</div>
+      <div>Design portion: ${((s.designPortion||0)*100).toFixed(0)}%</div>
+      <div>CA portion: ${((s.caPortion||0)*100).toFixed(0)}%</div>
+      <div class="ae-tip-note">Total fee = cost × share × rate × stage-2 complexity. Splits into Structural Engineering and Structural Services.</div>`;
+  }
+
+  function tipRegulatoryFlags(cfg) {
+    const flags = cfg.regulatoryFlags || [];
+    const base = cfg.permitSetBaseFactor != null ? cfg.permitSetBaseFactor : 0.8;
+    const rows = flags.map((f) => `<div>${escapeHtml(f.label)}: +${((f.permitSetAdder||0)*100).toFixed(0)}%</div>`).join('');
+    return `<strong>Regulatory Flags</strong>
+      <div class="ae-tip-note" style="margin-bottom:4px">Permit Set = base × (${base} + Σ active adders)</div>
+      ${rows}`;
+  }
+
+  function tipFeeScheduleFactor() {
+    return `<strong>Fee Schedule Factor</strong>
+      <div class="ae-tip-note">Multiplies the AIA fee schedule (per-project). Default 0.5. Click "View Fee Schedule" next to the input for the full matrix.</div>`;
+  }
+
+  function tipRegionalMultiplier() {
+    return `<strong>Regional Multiplier</strong>
+      <div class="ae-tip-note">Applied to both conditioned and unconditioned $/sf. Default 1.15 for Austin. Raise for higher-cost metros, lower for cheaper regions.</div>`;
+  }
+
   // ---------- Rendering ----------
 
   function render() {
@@ -655,7 +757,7 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="aeRegionalMultiplier">Regional Multiplier <span class="ae-calc-hint">city/region cost adjustment vs national average (1.00 = US avg)</span></label>
+            <label for="aeRegionalMultiplier">Regional Multiplier ${infoIcon(tipRegionalMultiplier())} <span class="ae-calc-hint">city/region cost adjustment vs national average (1.00 = US avg)</span></label>
             <input type="number" id="aeRegionalMultiplier" min="0" step="0.05" value="${(p.regionalMultiplier != null ? p.regionalMultiplier : 1.15)}">
           </div>
         </div>
@@ -672,10 +774,10 @@
         <h3>Stage 1 · Construction Cost</h3>
         <div class="ae-multiplier-strip">
           <div class="ae-multiplier-chip"><span class="ae-chip-label">Structural</span><span class="ae-chip-value">${fmtMult(s1.multipliers.structural)}</span></div>
-          <div class="ae-multiplier-chip"><span class="ae-chip-label">Size</span><span class="ae-chip-value">${fmtMult(s1.multipliers.size)}</span></div>
-          <div class="ae-multiplier-chip"><span class="ae-chip-label">Cond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.conditionedDensity)}</span></div>
-          <div class="ae-multiplier-chip"><span class="ae-chip-label">Uncond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.unconditionedDensity)}</span></div>
-          <div class="ae-multiplier-chip"><span class="ae-chip-label">Regional</span><span class="ae-chip-value">${fmtMult(s1.multipliers.regional)}</span></div>
+          <div class="ae-multiplier-chip"><span class="ae-chip-label">Size</span><span class="ae-chip-value">${fmtMult(s1.multipliers.size)}</span>${infoIcon(tipSizeCurve(cfg))}</div>
+          <div class="ae-multiplier-chip"><span class="ae-chip-label">Cond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.conditionedDensity)}</span>${infoIcon(tipDensityCurves(cfg))}</div>
+          <div class="ae-multiplier-chip"><span class="ae-chip-label">Uncond Density</span><span class="ae-chip-value">${fmtMult(s1.multipliers.unconditionedDensity)}</span>${infoIcon(tipDensityCurves(cfg))}</div>
+          <div class="ae-multiplier-chip"><span class="ae-chip-label">Regional</span><span class="ae-chip-value">${fmtMult(s1.multipliers.regional)}</span>${infoIcon(tipRegionalMultiplier())}</div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -718,10 +820,10 @@
     const s2 = result.stage2;
     return `
       <div class="form-section">
-        <h3>Stage 2 · Scope &amp; Regulatory</h3>
+        <h3>Stage 2 · Scope &amp; Regulatory ${infoIcon(tipPhaseWeights(cfg))} ${infoIcon(tipCdSplits(cfg))}</h3>
         <div class="form-row">
           <div class="form-group">
-            <label for="aeScheduleFactor">Fee Schedule Factor <span class="ae-calc-hint">multiplies the whole table for calibration</span></label>
+            <label for="aeScheduleFactor">Fee Schedule Factor ${infoIcon(tipFeeScheduleFactor())} <span class="ae-calc-hint">multiplies the whole table for calibration</span></label>
             <input type="number" id="aeScheduleFactor" step="0.05" min="0" value="${(cfg.feeSchedule.factor != null ? cfg.feeSchedule.factor : 1).toString()}">
           </div>
           <div class="form-group" style="flex: 0 0 auto; align-self: flex-end;">
@@ -741,16 +843,19 @@
             ${!s2.architectFloorApplied ? '<span class="ae-calc-hint">(structural fees compute separately — see Structural Engineering section)</span>' : ''}
           </div>
           <div class="ae-calc-result">
-            <span class="ae-calc-label">Base Architect Fee${s2.architectFloorApplied ? ' (floored)' : ''}</span>
+            <span class="ae-calc-label">Base Architect Fee${s2.architectFloorApplied ? ' (floored)' : ''} ${infoIcon(tipArchitectMinFee(cfg))}</span>
             <span class="ae-calc-value">${fmtMoney(s2.architectShare)}</span>
           </div>
+        </div>
+        <div class="ae-flags-header">
+          <strong>Regulatory Flags</strong> ${infoIcon(tipRegulatoryFlags(cfg))}
         </div>
         <div class="ae-flags-grid">
           ${cfg.regulatoryFlags.map((f) => {
             const checked = (state.stage2.activeFlags || []).includes(f.id) ? 'checked' : '';
             return `<label class="ae-flag-checkbox">
               <input type="checkbox" data-flag-id="${f.id}" ${checked}>
-              <span>${escapeHtml(f.label)}</span>
+              <span>${escapeHtml(f.label)} <span class="ae-flag-adder">+${Math.round((f.permitSetAdder || 0) * 100)}%</span></span>
             </label>`;
           }).join('')}
         </div>
@@ -853,6 +958,51 @@
   }
 
   // ---------- Event binding ----------
+
+  // ---------- Info-icon tooltip binding ----------
+  //
+  // Info icons carry their tooltip HTML in `data-tip`. On hover/focus,
+  // populate a shared floating tooltip element and position it above
+  // the icon. Single shared element so we're not spraying DOM nodes.
+  let _infoTipEl = null;
+  function getInfoTipEl() {
+    if (!_infoTipEl || !document.body.contains(_infoTipEl)) {
+      _infoTipEl = document.createElement('div');
+      _infoTipEl.className = 'ae-info-tooltip';
+      document.body.appendChild(_infoTipEl);
+    }
+    return _infoTipEl;
+  }
+  function showInfoTip(icon) {
+    const tip = getInfoTipEl();
+    tip.innerHTML = icon.dataset.tip || '';
+    tip.classList.add('visible');
+    // Position above the icon, nudging to stay in viewport.
+    const r = icon.getBoundingClientRect();
+    // Temp place to measure
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    const tipRect = tip.getBoundingClientRect();
+    let x = r.left + (r.width / 2) - (tipRect.width / 2);
+    let y = r.top - tipRect.height - 8;
+    // Clamp to viewport
+    const margin = 8;
+    x = Math.max(margin, Math.min(x, window.innerWidth - tipRect.width - margin));
+    if (y < margin) y = r.bottom + 8; // flip below if no room above
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideInfoTip() {
+    if (_infoTipEl) _infoTipEl.classList.remove('visible');
+  }
+  function bindInfoIcons() {
+    document.querySelectorAll('.ae-info-icon').forEach((icon) => {
+      icon.addEventListener('mouseenter', () => showInfoTip(icon));
+      icon.addEventListener('mouseleave', hideInfoTip);
+      icon.addEventListener('focus', () => showInfoTip(icon));
+      icon.addEventListener('blur', hideInfoTip);
+    });
+  }
 
   function bindEvents() {
     // Identity
@@ -1110,6 +1260,8 @@
       refreshExportSnapshot();
       render();
     });
+
+    bindInfoIcons();
   }
 
   function flashHeaderButton(id, label) {

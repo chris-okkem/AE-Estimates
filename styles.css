@@ -1390,6 +1390,85 @@ main {
   box-shadow: none !important;
 }
 
+/* ---------- Info icon with hover tooltip ---------- */
+.ae-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 4px;
+  font-size: 0.85em;
+  color: #64748b;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+  border-radius: 50%;
+  line-height: 1;
+}
+.ae-info-icon:hover,
+.ae-info-icon:focus {
+  color: #0f172a;
+  outline: none;
+}
+/* Floating tooltip element — positioned by JS, content rendered as HTML */
+.ae-info-tooltip {
+  position: fixed;
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  max-width: 340px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.3);
+  pointer-events: none;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.ae-info-tooltip.visible {
+  opacity: 1;
+}
+.ae-info-tooltip strong {
+  display: block;
+  color: #ffffff;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.ae-info-tooltip div {
+  font-variant-numeric: tabular-nums;
+}
+.ae-info-tooltip .ae-tip-note {
+  margin-top: 6px;
+  color: #cbd5e1;
+  font-style: italic;
+  font-size: 10.5px;
+}
+.ae-info-tooltip .ae-tip-sub {
+  margin-top: 6px;
+  font-weight: 600;
+  color: #fbbf24;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Small "+10%" label next to each flag checkbox */
+.ae-flag-adder {
+  color: #64748b;
+  font-size: 0.75em;
+  font-weight: 500;
+  margin-left: 2px;
+}
+.ae-flags-header {
+  margin-top: 0.75rem;
+  margin-bottom: 0.4rem;
+  color: #334155;
+  font-size: 0.875rem;
+}
+
 .ae-settings-close {
   background: transparent;
   border: none;
