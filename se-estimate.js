@@ -1061,21 +1061,31 @@
     work.push({ label: 'Rate', detail: '', value: '$' + formatNum(rate) + ' /hr' });
     work.push({ label: 'Fee', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(fee), bold: true });
 
-    // ----- Step 9: Design Coordination + Early Design Assist (auto-populate) -----
-    // Both default to 20% of Sealed Set hours. Included flags driven by
-    // the Design Stability dropdown:
-    //
-    //   Locked        -> DC unchecked, EDA unchecked
-    //                    (engineer-only scope; user can still toggle
-    //                    either on manually if needed)
-    //   Mostly Locked -> DC CHECKED, EDA unchecked
-    //                    (typical complex-custom; geometry set but
-    //                    conditions need resolution meetings)
-    //   Fluid         -> DC CHECKED, EDA CHECKED
-    //                    (heavy back-and-forth: design coordination
-    //                    work plus early design assist on top)
-    work.push({ heading: 'Step 9: Design Coordination + Early Design Assist' });
+    // ----- Step 9: Pre-Design + Design Coordination (auto-populate) -----
+    // Site Visit, Preliminary Review & Feasibility, Early Design Assist,
+    // and Design Coordination are all populated based on project inputs.
+    // Included flags use Design Stability and Project Type to pick the
+    // right defaults; the user can override any checkbox after Calculate.
+    work.push({ heading: 'Step 9: Pre-Design + Design Coordination' });
 
+    // Site Visit / Assessment: flat 2.5 hr. Included only when there's
+    // existing construction to assess (Addition or Remodel).
+    const siteVisitHours = 2.5;
+    const siteVisitIncluded = (a.projectType === 'addition' || a.projectType === 'remodel');
+
+    // Preliminary Review & Feasibility: 5% of raw work (pre-coord, pre-
+    // setup) with a 0.5 hr floor. Always checked; user unchecks if truly
+    // not doing any upfront review.
+    const feasPct = 0.05;
+    const feasFloor = 0.5;
+    const feasHours = Math.max(rawWorkHours * feasPct, feasFloor);
+    const feasIncluded = true;
+
+    // Design Coordination + Early Design Assist: both 20% of Sealed Set.
+    // Included flags driven by Design Stability:
+    //   Locked        -> DC unchecked, EDA unchecked
+    //   Mostly Locked -> DC checked,   EDA unchecked
+    //   Fluid         -> DC checked,   EDA checked
     const dcPct = 0.20;
     const edaPct = 0.20;
     const dcHours = totalHours * dcPct;
@@ -1083,10 +1093,12 @@
     const dcIncluded  = (a.designStability === 'mostly_locked' || a.designStability === 'fluid');
     const edaIncluded = (a.designStability === 'fluid');
     const dsLabel = (a.designStability || 'mostly_locked');
+    const ptLabel = (a.projectType || 'new_construction');
 
-    work.push({ label: 'Design Stability', detail: dsLabel, value: '' });
-    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}%`, value: formatNum(dcHours) + ' hrs ' + (dcIncluded ? '(included)' : '(unchecked)') });
-    work.push({ label: 'Early Design Assist', detail: `${formatNum(totalHours)} sealed set × ${(edaPct*100).toFixed(0)}%`, value: formatNum(edaHours) + ' hrs ' + (edaIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Site Visit / Assessment', detail: `flat 2.5 hr (project type: ${ptLabel})`, value: formatNum(siteVisitHours) + ' hrs ' + (siteVisitIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Preliminary Review & Feasibility', detail: `max(${formatNum(rawWorkHours)} raw × ${(feasPct*100).toFixed(0)}%, floor ${feasFloor} hr)`, value: formatNum(feasHours) + ' hrs ' + (feasIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}% (stability: ${dsLabel})`, value: formatNum(dcHours) + ' hrs ' + (dcIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Early Design Assist', detail: `${formatNum(totalHours)} sealed set × ${(edaPct*100).toFixed(0)}% (stability: ${dsLabel})`, value: formatNum(edaHours) + ' hrs ' + (edaIncluded ? '(included)' : '(unchecked)') });
 
     // ----- Step 10: Construction Phase Services (auto-populate) -----
     // CA percentage is additive across three independent axes (gravity,
@@ -1131,6 +1143,8 @@
       state.lineItems[id].dollars = hrs * rate;
       if (typeof included === 'boolean') state.lineItems[id].included = included;
     };
+    writeLine('site_visit', siteVisitHours, siteVisitIncluded);
+    writeLine('preliminary_feasibility', feasHours, feasIncluded);
     writeLine('early_design_assist', edaHours, edaIncluded);
     writeLine('design_coordination', dcHours, dcIncluded);
     writeLine('structural_observation', obsHrs, true);
