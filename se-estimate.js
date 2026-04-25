@@ -1061,12 +1061,34 @@
     work.push({ label: 'Rate', detail: '', value: '$' + formatNum(rate) + ' /hr' });
     work.push({ label: 'Fee', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(fee), bold: true });
 
-    // ----- Step 9: Construction Phase Services (auto-populate) -----
+    // ----- Step 9: Design Coordination (auto-populate) -----
+    // 20% of Sealed Set hours, always populated. The included flag is
+    // driven by Design Stability:
+    //   Locked        -> hours visible, included = false (engineer-only
+    //                    scope, no design coordination needed; user can
+    //                    still check it manually if there's a reason)
+    //   Mostly Locked -> hours visible, included = true (the typical
+    //                    "complex custom" case where geometry is set
+    //                    but conditions need resolution meetings)
+    //   Fluid         -> hours visible, included = false (Fluid is
+    //                    early design assist territory — that's a
+    //                    different scope captured elsewhere)
+    work.push({ heading: 'Step 9: Design Coordination' });
+
+    const dcPct = 0.20;
+    const dcHours = totalHours * dcPct;
+    const dcIncluded = (a.designStability === 'mostly_locked');
+    const dsLabel = (a.designStability || 'mostly_locked');
+
+    work.push({ label: 'Design Stability', detail: dsLabel, value: dcIncluded ? 'included' : 'unchecked (recommended)' });
+    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}%`, value: formatNum(dcHours) + ' hrs', bold: true });
+
+    // ----- Step 10: Construction Phase Services (auto-populate) -----
     // CA percentage is additive across three independent axes (gravity,
     // lateral, project type), clamped at 35%. Each CA line item has a
     // floor so tiny projects don't drop below a minimum effort.
     // Submittal Review is zeroed out when there are no shop drawings.
-    work.push({ heading: 'Step 9: Construction Phase Services' });
+    work.push({ heading: 'Step 10: Construction Phase Services' });
 
     const gravCaMod = caModifierFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
     const latCaMod  = caModifierFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
@@ -1094,18 +1116,20 @@
     work.push({ label: 'Submittal Review', detail: hasShopDrawings ? `max(${formatNum(caTotal * CA_SPLIT.submittal)}, floor ${CA_FLOORS.submittal})` : 'no shop drawings', value: formatNum(subHrs) + ' hrs' });
     work.push({ label: 'CA Line Total', detail: `${formatNum(obsHrs)} + ${formatNum(rfiHrs)} + ${formatNum(subHrs)}`, value: formatNum(caLineTotal) + ' hrs', bold: true });
 
-    // Apply the auto-populated CA hours/dollars to state.lineItems so the
-    // Fee Estimate table picks them up on next render. Always overwrites —
-    // user edits to CA lines are replaced on every Calculate.
+    // Apply auto-populated hours/dollars to state.lineItems so the Fee
+    // Estimate table picks them up on next render. Always overwrites —
+    // user edits to these lines are replaced on every Calculate.
     if (!state.lineItems) state.lineItems = makeInitialLineItems();
-    const writeLine = (id, hrs) => {
+    const writeLine = (id, hrs, included) => {
       if (!state.lineItems[id]) state.lineItems[id] = { hours: 0, dollars: 0, included: true };
       state.lineItems[id].hours = hrs;
       state.lineItems[id].dollars = hrs * rate;
+      if (typeof included === 'boolean') state.lineItems[id].included = included;
     };
-    writeLine('structural_observation', obsHrs);
-    writeLine('rfi_response', rfiHrs);
-    writeLine('submittal_review', subHrs);
+    writeLine('design_coordination', dcHours, dcIncluded);
+    writeLine('structural_observation', obsHrs, true);
+    writeLine('rfi_response', rfiHrs, true);
+    writeLine('submittal_review', subHrs, true);
 
     renderOutput(work, totalHours, rate);
   }
