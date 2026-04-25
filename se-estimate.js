@@ -1061,27 +1061,32 @@
     work.push({ label: 'Rate', detail: '', value: '$' + formatNum(rate) + ' /hr' });
     work.push({ label: 'Fee', detail: `${formatNum(totalHours)} hrs × $${formatNum(rate)}`, value: '$' + formatMoney(fee), bold: true });
 
-    // ----- Step 9: Design Coordination (auto-populate) -----
-    // 20% of Sealed Set hours, always populated. The included flag is
-    // driven by Design Stability:
-    //   Locked        -> hours visible, included = false (engineer-only
-    //                    scope, no design coordination needed; user can
-    //                    still check it manually if there's a reason)
-    //   Mostly Locked -> hours visible, included = true (the typical
-    //                    "complex custom" case where geometry is set
-    //                    but conditions need resolution meetings)
-    //   Fluid         -> hours visible, included = false (Fluid is
-    //                    early design assist territory — that's a
-    //                    different scope captured elsewhere)
-    work.push({ heading: 'Step 9: Design Coordination' });
+    // ----- Step 9: Design Coordination + Early Design Assist (auto-populate) -----
+    // Both default to 20% of Sealed Set hours. Included flags driven by
+    // the Design Stability dropdown:
+    //
+    //   Locked        -> DC unchecked, EDA unchecked
+    //                    (engineer-only scope; user can still toggle
+    //                    either on manually if needed)
+    //   Mostly Locked -> DC CHECKED, EDA unchecked
+    //                    (typical complex-custom; geometry set but
+    //                    conditions need resolution meetings)
+    //   Fluid         -> DC CHECKED, EDA CHECKED
+    //                    (heavy back-and-forth: design coordination
+    //                    work plus early design assist on top)
+    work.push({ heading: 'Step 9: Design Coordination + Early Design Assist' });
 
     const dcPct = 0.20;
+    const edaPct = 0.20;
     const dcHours = totalHours * dcPct;
-    const dcIncluded = (a.designStability === 'mostly_locked');
+    const edaHours = totalHours * edaPct;
+    const dcIncluded  = (a.designStability === 'mostly_locked' || a.designStability === 'fluid');
+    const edaIncluded = (a.designStability === 'fluid');
     const dsLabel = (a.designStability || 'mostly_locked');
 
-    work.push({ label: 'Design Stability', detail: dsLabel, value: dcIncluded ? 'included' : 'unchecked (recommended)' });
-    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}%`, value: formatNum(dcHours) + ' hrs', bold: true });
+    work.push({ label: 'Design Stability', detail: dsLabel, value: '' });
+    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}%`, value: formatNum(dcHours) + ' hrs ' + (dcIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Early Design Assist', detail: `${formatNum(totalHours)} sealed set × ${(edaPct*100).toFixed(0)}%`, value: formatNum(edaHours) + ' hrs ' + (edaIncluded ? '(included)' : '(unchecked)') });
 
     // ----- Step 10: Construction Phase Services (auto-populate) -----
     // CA percentage is additive across three independent axes (gravity,
@@ -1126,6 +1131,7 @@
       state.lineItems[id].dollars = hrs * rate;
       if (typeof included === 'boolean') state.lineItems[id].included = included;
     };
+    writeLine('early_design_assist', edaHours, edaIncluded);
     writeLine('design_coordination', dcHours, dcIncluded);
     writeLine('structural_observation', obsHrs, true);
     writeLine('rfi_response', rfiHrs, true);
