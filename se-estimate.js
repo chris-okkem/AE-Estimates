@@ -51,7 +51,11 @@
 
   const CA_BASE_PCT = 0.10;
   const CA_CAP_PCT  = 0.35;
-  const CA_SPLIT = { observation: 0.50, rfi: 0.33, submittal: 0.17 };
+  // Distribution favors RFI over submittal review for residential, where
+  // RFIs (field conditions, connection clarifications) eat more time than
+  // shop-drawing review. When a project has no shop drawings, the 10%
+  // submittal share simply drops off — total CA bills at 90% of CA%.
+  const CA_SPLIT = { observation: 0.50, rfi: 0.40, submittal: 0.10 };
   const CA_FLOORS = { observation: 6, rfi: 4, submittal: 2 };
 
   function gravityFactorFor(value) {
