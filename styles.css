@@ -320,6 +320,7 @@ main {
   color: #94a3b8;
 }
 .li-fee-table input.li-hrs,
+.li-fee-table input.li-rate,
 .li-fee-table input.li-dollars {
   width: 6rem;
   padding: 0.3rem 0.5rem;
@@ -328,6 +329,10 @@ main {
   border-radius: 4px;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
+}
+.li-fee-table input.li-rate {
+  width: 4.5rem;
+  color: #475569;
 }
 .li-fee-table input.li-include-cb {
   width: 1rem;

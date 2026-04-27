@@ -113,7 +113,7 @@
   function makeInitialLineItems() {
     const out = {};
     LINE_ITEM_DEFS.forEach((d) => {
-      out[d.id] = { hours: 0, dollars: 0, included: true };
+      out[d.id] = { hours: 0, dollars: 0, included: true, rate: rateForLine(d.id) };
     });
     return out;
   }
@@ -1150,15 +1150,17 @@
     work.push({ label: 'CA Line Total', detail: `${formatNum(obsHrs)} + ${formatNum(rfiHrs)} + ${formatNum(subHrs)}`, value: formatNum(caLineTotal) + ' hrs', bold: true });
 
     // Apply auto-populated hours/dollars to state.lineItems so the Fee
-    // Estimate table picks them up on next render. Always overwrites —
-    // user edits to these lines are replaced on every Calculate. Each
-    // line bills at its own rate (rateForLine), not the global rate.
+    // Estimate table picks them up on next render. Hours and included
+    // are overwritten on every Calculate; rate is PRESERVED so user
+    // edits in the Fee Estimate table's Rate column stick across calcs.
     if (!state.lineItems) state.lineItems = makeInitialLineItems();
     const writeLine = (id, hrs, included) => {
-      if (!state.lineItems[id]) state.lineItems[id] = { hours: 0, dollars: 0, included: true };
-      state.lineItems[id].hours = hrs;
-      state.lineItems[id].dollars = hrs * rateForLine(id);
-      if (typeof included === 'boolean') state.lineItems[id].included = included;
+      if (!state.lineItems[id]) state.lineItems[id] = { hours: 0, dollars: 0, included: true, rate: rateForLine(id) };
+      const li = state.lineItems[id];
+      if (typeof li.rate !== 'number' || li.rate <= 0) li.rate = rateForLine(id);
+      li.hours = hrs;
+      li.dollars = hrs * li.rate;
+      if (typeof included === 'boolean') li.included = included;
     };
     writeLine('site_visit', siteVisitHours, siteVisitIncluded);
     writeLine('preliminary_feasibility', feasHours, feasIncluded);
@@ -1224,6 +1226,11 @@
     Object.keys(seedLines).forEach((id) => {
       if (!merged.lineItems[id]) merged.lineItems[id] = seedLines[id];
     });
+    // Backfill rate on each line item — older saves predate per-line rates.
+    Object.keys(merged.lineItems).forEach((id) => {
+      const li = merged.lineItems[id];
+      if (li && (typeof li.rate !== 'number' || li.rate <= 0)) li.rate = rateForLine(id);
+    });
     return merged;
   }
 
@@ -1253,11 +1260,13 @@
     lastCalculatedFee = totalHours * rate;
 
     // Seed the auto-populated Structural Analysis and Design line item
-    // from the latest calc. (Was "sealed_set" before the rename.)
+    // from the latest calc. (Was "sealed_set" before the rename.) Rate
+    // is preserved across recalcs to honor user edits in the Rate column.
     if (!state.lineItems) state.lineItems = makeInitialLineItems();
-    state.lineItems.structural_analysis_design = state.lineItems.structural_analysis_design || { hours: 0, dollars: 0, included: true };
-    state.lineItems.structural_analysis_design.hours = totalHours;
-    state.lineItems.structural_analysis_design.dollars = totalHours * rate;
+    const sad = state.lineItems.structural_analysis_design = state.lineItems.structural_analysis_design || { hours: 0, dollars: 0, included: true, rate: rate };
+    if (typeof sad.rate !== 'number' || sad.rate <= 0) sad.rate = rate;
+    sad.hours = totalHours;
+    sad.dollars = totalHours * sad.rate;
 
     const outputDiv = document.getElementById('estimate-output');
 
@@ -1322,13 +1331,24 @@
       exportProject();
     });
 
+    // Helper to get the currently-saved rate for the SAD line so the +/-
+    // buttons honor any rate edit the user made in the Fee Estimate
+    // table (rather than always using the global Target $/Hour input).
+    const sadRate = () => {
+      const li = state.lineItems && state.lineItems.structural_analysis_design;
+      return (li && typeof li.rate === 'number' && li.rate > 0) ? li.rate : currentRate;
+    };
+
     document.getElementById('btnHoursUp').addEventListener('click', () => {
       adjustedHours += 1;
-      updateSummaryFee();
+      const r = sadRate();
+      lastCalculatedFee = adjustedHours * r;
+      document.getElementById('summaryHours').textContent = formatNum(adjustedHours);
+      document.getElementById('summaryFee').textContent = '$' + formatMoney(lastCalculatedFee);
       // Keep Structural Analysis and Design line item in sync so
       // proposal/export reflect the bump.
       state.lineItems.structural_analysis_design.hours = adjustedHours;
-      state.lineItems.structural_analysis_design.dollars = adjustedHours * currentRate;
+      state.lineItems.structural_analysis_design.dollars = adjustedHours * r;
       refreshLineItemRow('structural_analysis_design');
       refreshLineItemTotals();
     });
@@ -1336,9 +1356,12 @@
     document.getElementById('btnHoursDown').addEventListener('click', () => {
       if (adjustedHours >= 1) {
         adjustedHours -= 1;
-        updateSummaryFee();
+        const r = sadRate();
+        lastCalculatedFee = adjustedHours * r;
+        document.getElementById('summaryHours').textContent = formatNum(adjustedHours);
+        document.getElementById('summaryFee').textContent = '$' + formatMoney(lastCalculatedFee);
         state.lineItems.structural_analysis_design.hours = adjustedHours;
-        state.lineItems.structural_analysis_design.dollars = adjustedHours * currentRate;
+        state.lineItems.structural_analysis_design.dollars = adjustedHours * r;
         refreshLineItemRow('structural_analysis_design');
         refreshLineItemTotals();
       }
@@ -1363,20 +1386,23 @@
             <th class="li-include">Inc.</th>
             <th>Line Item</th>
             <th class="amount">Hours</th>
+            <th class="amount">Rate</th>
             <th class="amount">Fee</th>
           </tr>
         </thead>
         <tbody>`;
 
     phases.forEach((p) => {
-      html += `<tr class="li-phase-header"><td colspan="4">${escapeAttr(p.name)}</td></tr>`;
+      html += `<tr class="li-phase-header"><td colspan="5">${escapeAttr(p.name)}</td></tr>`;
       p.lines.forEach((d) => {
-        const li = state.lineItems[d.id] || { hours: 0, dollars: 0, included: true };
+        const li = state.lineItems[d.id] || { hours: 0, dollars: 0, included: true, rate: rateForLine(d.id) };
         const stk = li.included ? '' : ' li-excluded';
+        const lineRate = (typeof li.rate === 'number' && li.rate > 0) ? li.rate : rateForLine(d.id);
         html += `<tr class="li-row${stk}" data-line="${d.id}">
           <td class="li-include"><input type="checkbox" class="li-include-cb" data-line="${d.id}" ${li.included ? 'checked' : ''}></td>
           <td>${escapeAttr(d.label)}</td>
           <td class="amount"><input type="number" class="li-hrs" data-line="${d.id}" min="0" step="0.5" value="${formatNum(li.hours || 0)}"></td>
+          <td class="amount"><input type="number" class="li-rate" data-line="${d.id}" min="0" step="5" value="${Math.round(lineRate)}"></td>
           <td class="amount"><input type="number" class="li-dollars" data-line="${d.id}" min="0" step="50" value="${Math.round(li.dollars || 0)}"></td>
         </tr>`;
       });
@@ -1384,6 +1410,7 @@
         <td></td>
         <td><strong>${escapeAttr(p.name)} subtotal</strong></td>
         <td class="amount"><strong class="li-subtotal-hrs"></strong></td>
+        <td></td>
         <td class="amount"><strong class="li-subtotal-dollars"></strong></td>
       </tr>`;
     });
@@ -1392,6 +1419,7 @@
       <td></td>
       <td><strong>Grand Total</strong></td>
       <td class="amount"><strong id="liGrandHrs"></strong></td>
+      <td></td>
       <td class="amount"><strong id="liGrandDollars"></strong></td>
     </tr>`;
 
@@ -1410,13 +1438,33 @@
       });
     });
 
+    // Helper: read the line's persisted rate, falling back to the default.
+    const lineRate = (id) => {
+      const li = state.lineItems[id];
+      const r = li && typeof li.rate === 'number' && li.rate > 0 ? li.rate : rateForLine(id);
+      return r;
+    };
+
     document.querySelectorAll('.li-hrs').forEach((input) => {
       input.addEventListener('input', () => {
         const id = input.dataset.line;
         const hrs = parseFloat(input.value) || 0;
-        const lineRate = rateForLine(id);
+        const r = lineRate(id);
         state.lineItems[id].hours = hrs;
-        state.lineItems[id].dollars = hrs * lineRate;
+        state.lineItems[id].dollars = hrs * r;
+        const dollarsEl = document.querySelector(`.li-dollars[data-line="${id}"]`);
+        if (dollarsEl) dollarsEl.value = Math.round(state.lineItems[id].dollars);
+        refreshLineItemTotals();
+      });
+    });
+
+    document.querySelectorAll('.li-rate').forEach((input) => {
+      input.addEventListener('input', () => {
+        const id = input.dataset.line;
+        const r = parseFloat(input.value) || 0;
+        state.lineItems[id].rate = r;
+        // Recompute dollars from current hours × new rate.
+        state.lineItems[id].dollars = (state.lineItems[id].hours || 0) * r;
         const dollarsEl = document.querySelector(`.li-dollars[data-line="${id}"]`);
         if (dollarsEl) dollarsEl.value = Math.round(state.lineItems[id].dollars);
         refreshLineItemTotals();
@@ -1427,9 +1475,9 @@
       input.addEventListener('input', () => {
         const id = input.dataset.line;
         const dol = parseFloat(input.value) || 0;
-        const lineRate = rateForLine(id);
+        const r = lineRate(id);
         state.lineItems[id].dollars = dol;
-        state.lineItems[id].hours = lineRate > 0 ? dol / lineRate : 0;
+        state.lineItems[id].hours = r > 0 ? dol / r : 0;
         const hrsEl = document.querySelector(`.li-hrs[data-line="${id}"]`);
         if (hrsEl) hrsEl.value = formatNum(state.lineItems[id].hours);
         refreshLineItemTotals();
@@ -1443,8 +1491,10 @@
     const li = state.lineItems[id];
     if (!li) return;
     const hrsEl = document.querySelector(`.li-hrs[data-line="${id}"]`);
+    const rateEl = document.querySelector(`.li-rate[data-line="${id}"]`);
     const dolEl = document.querySelector(`.li-dollars[data-line="${id}"]`);
     if (hrsEl) hrsEl.value = formatNum(li.hours || 0);
+    if (rateEl && typeof li.rate === 'number') rateEl.value = Math.round(li.rate);
     if (dolEl) dolEl.value = Math.round(li.dollars || 0);
   }
 
