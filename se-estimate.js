@@ -104,10 +104,19 @@
   // RATE_ENGINEER ($190); Structural Analysis and Design uses the user-
   // controlled global rate (state.dollarPerHour, default $160) since
   // production work on that line is partly drafter-blended.
+  //
+  // Wrapped in try/catch because this can be called from makeInitialState
+  // (via makeInitialLineItems) before `state` is in scope, which would
+  // otherwise throw ReferenceError thanks to `let`'s temporal dead zone.
   function rateForLine(id) {
     const def = LINE_ITEM_DEFS.find((d) => d.id === id);
     if (def && typeof def.rate === 'number') return def.rate;
-    return state && state.dollarPerHour > 0 ? state.dollarPerHour : 160;
+    try {
+      if (typeof state !== 'undefined' && state && state.dollarPerHour > 0) {
+        return state.dollarPerHour;
+      }
+    } catch (e) { /* state in TDZ — fall through to default */ }
+    return 160;
   }
 
   function makeInitialLineItems() {
