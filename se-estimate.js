@@ -319,7 +319,7 @@
           ${layers.map((key) => renderCornerLayer(key)).join('')}
           <div class="form-row" style="margin-top: 0.75rem;">
             <div class="form-group">
-              <label for="roofCount">Roof Count</label>
+              <label for="roofCount">Number of separate roof areas</label>
               <input type="number" id="roofCount" min="0" value="${state.roofCount}">
             </div>
           </div>
@@ -434,7 +434,7 @@
               <input type="number" id="vaultZones" min="0" value="${state.vaultZones}">
             </div>
             <div class="form-group">
-              <label for="plateHeightSets">Distinct Plate-Height Sets</label>
+              <label for="plateHeightSets">Distinct Plate Heights</label>
               <input type="number" id="plateHeightSets" min="1" value="${state.plateHeightSets}">
             </div>
           </div>
@@ -866,7 +866,7 @@
     let totalSquares = 0;
 
     work.push({ heading: 'Step 1: Convert Corners to Squares' });
-    work.push({ note: 'Formula per outline: Squares = (Corners ÷ 2) − 1' });
+    work.push({ note: 'Each plan-view outline is converted from a corner count to a "square" count using Squares = (Corners ÷ 2) − 1. A square is roughly one rectangular bay of structure. Squares per layer drive most of the base hours in Step 2.' });
 
     layerKeys.forEach((key) => {
       const outlines = state.cornerOutlines[key] || [4];
@@ -911,15 +911,16 @@
     const framingKeys = layerKeys.filter((k) => k !== 'slab');
     const framingSquares = framingKeys.reduce((sum, k) => sum + (layerSquares[k] || 0), 0);
 
-    work.push({ label: 'Foundation Squares (slab)', detail: '', value: formatNum(foundationSquares) + ' sq', bold: false });
-    work.push({ label: 'Framing Squares', detail: framingKeys.map((k) => formatNum(layerSquares[k])).join(' + '), value: formatNum(framingSquares) + ' sq', bold: false });
+    work.push({ label: 'Foundation Squares (slab layer)', detail: '', value: formatNum(foundationSquares) + ' squares', bold: false });
+    work.push({ label: 'Framing Squares (all ceiling/floor layers)', detail: framingKeys.length > 0 ? framingKeys.map((k) => formatNum(layerSquares[k])).join(' + ') + ' (per-layer totals)' : '', value: formatNum(framingSquares) + ' squares', bold: false });
     if (state.pierAndBeamPresent) {
-      work.push({ label: 'Pier & Beam Squares', detail: '', value: formatNum(pierAndBeamSquares) + ' sq', bold: false });
+      work.push({ label: 'Pier & Beam Squares', detail: '', value: formatNum(pierAndBeamSquares) + ' squares', bold: false });
     }
-    work.push({ label: 'Roof Count', detail: '', value: state.roofCount, bold: false });
-    work.push({ label: 'Total Squares', detail: formatNum(foundationSquares) + ' + ' + formatNum(framingSquares) + (state.pierAndBeamPresent ? ' + ' + formatNum(pierAndBeamSquares) : ''), value: formatNum(totalSquares) + ' sq', bold: true });
+    work.push({ label: 'Roof Count', detail: 'Number of separate roof areas', value: state.roofCount, bold: false });
+    work.push({ label: 'Total Squares', detail: 'Foundation + Framing' + (state.pierAndBeamPresent ? ' + Pier & Beam' : '') + ' = ' + formatNum(foundationSquares) + ' + ' + formatNum(framingSquares) + (state.pierAndBeamPresent ? ' + ' + formatNum(pierAndBeamSquares) : ''), value: formatNum(totalSquares) + ' squares', bold: true });
 
     work.push({ heading: 'Step 2: Base Hours' });
+    work.push({ note: 'Engineering hours for the structural elements before any complexity factors, modifiers, setup, or coordination are applied.' });
 
     // Foundation squares use a tapered rate: the first sq is 1.0 hr, each
     // additional sq drops by 0.1 hr, and every sq past #8 is floored at
@@ -945,31 +946,31 @@
     const manualConcreteHours = (state.manualConcreteDetails || []).reduce((sum, item) => sum + (item.hours || 0), 0);
     const concreteHours = minorConcreteHours + majorConcreteHours + manualConcreteHours;
 
-    work.push({ label: 'Foundation', detail: `${state.foundationLevels} lvl × 1 hr + ${formatNum(foundationSquares)} sq tapered (1.0→0.25 floor) = ${formatNum(fndSquareHours)}`, value: formatNum(foundationHours) + ' hrs' });
-    work.push({ label: 'Framing squares', detail: `${formatNum(framingSquares)} sq × 3 hrs`, value: formatNum(framingSquareHours) + ' hrs' });
+    work.push({ label: 'Foundation', detail: `${state.foundationLevels} foundation level${state.foundationLevels === 1 ? '' : 's'} × 1 hr (one sheet setup per level) + ${formatNum(foundationSquares)} squares of foundation, tapered (first square = 1.0 hr, dropping 0.1 hr each, floored at 0.25 hr/sq) = ${formatNum(fndSquareHours)} hr from squares`, value: formatNum(foundationHours) + ' hrs' });
+    work.push({ label: 'Framing', detail: `${formatNum(framingSquares)} framing squares × 3 hr each (per-square work: joist sizing, header above openings, plan callouts)`, value: formatNum(framingSquareHours) + ' hrs' });
 
     const pierAndBeamHours = state.pierAndBeamPresent ? 2 * pierAndBeamSquares : 0;
     if (state.pierAndBeamPresent) {
-      work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} sq × 2 hrs`, value: formatNum(pierAndBeamHours) + ' hrs' });
+      work.push({ label: 'Pier & beam framing', detail: `${formatNum(pierAndBeamSquares)} pier-and-beam squares × 2 hr each (uniform pier grid + repetitive beams; less variable than typical framing)`, value: formatNum(pierAndBeamHours) + ' hrs' });
     }
-    work.push({ label: 'Roof', detail: `${state.roofLevels} lvl × 1 hr + ${state.roofCount} count × 1 hr`, value: formatNum(roofHours) + ' hrs' });
+    work.push({ label: 'Roof', detail: `${state.roofLevels} roof level${state.roofLevels === 1 ? '' : 's'} × 1 hr (each new bearing height needs its own framing plan) + ${state.roofCount} separate roof area${state.roofCount === 1 ? '' : 's'} × 1 hr (each chunk: rafter sizing, ridge, line work)`, value: formatNum(roofHours) + ' hrs' });
     const concreteParts = [];
-    if (state.minorConcreteDetails > 0) concreteParts.push(`${state.minorConcreteDetails} minor × 3 hrs = ${formatNum(minorConcreteHours)}`);
-    if (state.majorConcreteDetails > 0) concreteParts.push(`${state.majorConcreteDetails} major × 6 hrs = ${formatNum(majorConcreteHours)}`);
-    if (manualConcreteHours > 0) concreteParts.push(`manual: ${formatNum(manualConcreteHours)} hrs`);
-    work.push({ label: 'Concrete details', detail: concreteParts.length ? concreteParts.join(', ') : 'none', value: formatNum(concreteHours) + ' hrs' });
+    if (state.minorConcreteDetails > 0) concreteParts.push(`${state.minorConcreteDetails} minor (≤6 ft) × 3 hr = ${formatNum(minorConcreteHours)} hr`);
+    if (state.majorConcreteDetails > 0) concreteParts.push(`${state.majorConcreteDetails} major (>6 ft or complex) × 6 hr = ${formatNum(majorConcreteHours)} hr`);
+    if (manualConcreteHours > 0) concreteParts.push(`manually-entered details: ${formatNum(manualConcreteHours)} hr`);
+    work.push({ label: 'Concrete details', detail: concreteParts.length ? concreteParts.join(' + ') : 'none entered', value: formatNum(concreteHours) + ' hrs' });
 
     const baseHours = foundationHours + framingSquareHours + pierAndBeamHours + roofHours + concreteHours;
     const baseParts = [foundationHours, framingSquareHours, pierAndBeamHours, roofHours, concreteHours].map(formatNum).join(' + ');
-    work.push({ label: 'Base Hours Total', detail: baseParts, value: formatNum(baseHours) + ' hrs', bold: true });
+    work.push({ label: 'Base Hours Total', detail: 'Foundation + Framing + Pier & Beam + Roof + Concrete = ' + baseParts, value: formatNum(baseHours) + ' hrs', bold: true });
 
     let lateralHours = 0;
     if (state.lateralRequired) {
       work.push({ heading: 'Step 3: Lateral Hours' });
-      work.push({ note: '3 hrs per level base + weighted problematic brace lines × 3 hrs' });
+      work.push({ note: 'Wind/seismic resistance work — diaphragm shear, hold-down design, and any walls flagged as "problematic brace lines" because openings interrupt them. Upper-story lines weight slightly higher because their loads have to transfer down through the diaphragm.' });
 
       const lateralBaseHours = 3 * state.stories;
-      work.push({ label: 'Lateral base', detail: `${state.stories} level${state.stories > 1 ? 's' : ''} × 3 hrs`, value: formatNum(lateralBaseHours) + ' hrs' });
+      work.push({ label: 'Lateral base', detail: `${state.stories} story${state.stories === 1 ? '' : ' (each story)'} × 3 hr (typical shear-wall analysis and hold-down schedule per level)`, value: formatNum(lateralBaseHours) + ' hrs' });
 
       const L1 = state.problematicBraceLines.level1 || 0;
       const L2 = state.problematicBraceLines.level2 || 0;
@@ -978,23 +979,24 @@
 
       const weightedParts = [];
       const weightedValues = [];
-      if (state.stories >= 1) { weightedParts.push(`L1: ${L1} × 1.0 = ${formatNum(L1 * 1.0)}`); weightedValues.push(L1 * 1.0); }
-      if (state.stories >= 2) { weightedParts.push(`L2: ${L2} × 1.2 = ${formatNum(L2 * 1.2)}`); weightedValues.push(L2 * 1.2); }
-      if (state.stories >= 3) { weightedParts.push(`L3: ${L3} × 1.3 = ${formatNum(L3 * 1.3)}`); weightedValues.push(L3 * 1.3); }
-      if (state.stories >= 4) { weightedParts.push(`L4: ${L4} × 1.4 = ${formatNum(L4 * 1.4)}`); weightedValues.push(L4 * 1.4); }
+      if (state.stories >= 1) { weightedParts.push(`Level 1: ${L1} problematic line${L1 === 1 ? '' : 's'} × 1.0 weight (ground floor baseline)`);                       weightedValues.push(L1 * 1.0); }
+      if (state.stories >= 2) { weightedParts.push(`Level 2: ${L2} problematic line${L2 === 1 ? '' : 's'} × 1.2 weight (upper-story load path adds complexity)`);       weightedValues.push(L2 * 1.2); }
+      if (state.stories >= 3) { weightedParts.push(`Level 3: ${L3} problematic line${L3 === 1 ? '' : 's'} × 1.3 weight`);                                                weightedValues.push(L3 * 1.3); }
+      if (state.stories >= 4) { weightedParts.push(`Level 4: ${L4} problematic line${L4 === 1 ? '' : 's'} × 1.4 weight`);                                                weightedValues.push(L4 * 1.4); }
 
       const weightedSum = weightedValues.reduce((a, b) => a + b, 0);
       lateralHours = lateralBaseHours + 3 * weightedSum;
 
       weightedParts.forEach((p) => work.push({ label: '', detail: p, value: '' }));
-      work.push({ label: 'Weighted sum', detail: weightedValues.map(formatNum).join(' + '), value: formatNum(weightedSum) });
-      work.push({ label: 'Lateral Hours', detail: `${formatNum(lateralBaseHours)} + 3 × ${formatNum(weightedSum)}`, value: formatNum(lateralHours) + ' hrs', bold: true });
+      work.push({ label: 'Weighted sum of problematic lines', detail: 'Sum of (count × weight) across all stories', value: formatNum(weightedSum) });
+      work.push({ label: 'Lateral Hours', detail: `${formatNum(lateralBaseHours)} hr base + 3 hr per weighted line × ${formatNum(weightedSum)} weighted lines = ${formatNum(lateralHours)} hr`, value: formatNum(lateralHours) + ' hrs', bold: true });
     } else {
       work.push({ heading: 'Step 3: Lateral Hours (Not Required)' });
-      work.push({ label: 'Lateral Hours', detail: 'Lateral analysis not required', value: '0 hrs', bold: true });
+      work.push({ label: 'Lateral Hours', detail: 'Lateral Required toggle is off — no wind/seismic work in scope', value: '0 hrs', bold: true });
     }
 
     work.push({ heading: 'Step 4: Modifier Hours' });
+    work.push({ note: 'Per-event hours for conditions that add structural complexity beyond the typical bay (long spans, transfer beams, cantilevers, etc.). Lateral hours from Step 3 are folded in here so the total reflects all complexity-driven work.' });
 
     const discHours = 3 * state.discontinuities;
     const span16Hours = 2 * state.span16to24Count;
@@ -1006,19 +1008,19 @@
     const cantileverHours = 3 * state.cantileverAreas;
     const specialtyHours = (state.specialtyDetails || []).reduce((sum, item) => sum + (item.hours || 0), 0);
 
-    work.push({ label: 'Discontinuities', detail: `${state.discontinuities} × 3 hrs`, value: formatNum(discHours) + ' hrs' });
-    work.push({ label: 'Spans 16–24 ft', detail: `${state.span16to24Count} × 2 hrs`, value: formatNum(span16Hours) + ' hrs' });
-    work.push({ label: 'Spans >24 ft', detail: `${state.spanOver24Count} × 6 hrs`, value: formatNum(spanOver24Hours) + ' hrs' });
-    work.push({ label: 'Vault zones', detail: `${state.vaultZones} × 3 hrs`, value: formatNum(vaultHours) + ' hrs' });
-    work.push({ label: 'Plate-height sets', detail: `(${state.plateHeightSets} − 1) × 1 hr = ${plateExtra} × 1`, value: formatNum(plateHours) + ' hrs' });
-    work.push({ label: 'Voids / penetrations', detail: `${state.voidsPenetrations} × 2 hrs`, value: formatNum(voidHours) + ' hrs' });
-    work.push({ label: 'Cantilever areas', detail: `${state.cantileverAreas} × 3 hrs`, value: formatNum(cantileverHours) + ' hrs' });
-    work.push({ label: 'Specialty', detail: specialtyHours > 0 ? `manual: ${formatNum(specialtyHours)} hrs` : 'none', value: formatNum(specialtyHours) + ' hrs' });
-    work.push({ label: 'Lateral (from Step 3)', detail: '', value: formatNum(lateralHours) + ' hrs' });
+    work.push({ label: 'Discontinuities', detail: `${state.discontinuities} discontinuit${state.discontinuities === 1 ? 'y' : 'ies'} × 3 hr each (analyze the transferred point load + size a beam to carry it down)`, value: formatNum(discHours) + ' hrs' });
+    work.push({ label: 'Spans 16–24 ft', detail: `${state.span16to24Count} span${state.span16to24Count === 1 ? '' : 's'} × 2 hr each (TJI/LVL span-table lookup + plan note)`, value: formatNum(span16Hours) + ' hrs' });
+    work.push({ label: 'Spans >24 ft', detail: `${state.spanOver24Count} span${state.spanOver24Count === 1 ? '' : 's'} × 6 hr each (sized beam + supporting columns at each end + connection details)`, value: formatNum(spanOver24Hours) + ' hrs' });
+    work.push({ label: 'Vaulted / cathedral zones', detail: `${state.vaultZones} zone${state.vaultZones === 1 ? '' : 's'} × 3 hr each (ridge beam sizing + ridge posts + section drawing)`, value: formatNum(vaultHours) + ' hrs' });
+    work.push({ label: 'Plate-height transitions', detail: `${plateExtra} transition${plateExtra === 1 ? '' : 's'} between plate heights (${state.plateHeightSets} distinct heights minus the first one, which is free) × 1 hr each`, value: formatNum(plateHours) + ' hrs' });
+    work.push({ label: 'Voids / penetrations', detail: `${state.voidsPenetrations} void${state.voidsPenetrations === 1 ? '' : 's'} × 2 hr each (header at the void edge + trimmer joists + plan note)`, value: formatNum(voidHours) + ' hrs' });
+    work.push({ label: 'Cantilever areas', detail: `${state.cantileverAreas} cantilever${state.cantileverAreas === 1 ? '' : 's'} × 3 hr each (cantilever moment + back-span check + tail hold-down + detail)`, value: formatNum(cantileverHours) + ' hrs' });
+    work.push({ label: 'Specialty (manual entries)', detail: specialtyHours > 0 ? `Sum of hours from manually-entered items in the Specialty Details section above` : 'none entered', value: formatNum(specialtyHours) + ' hrs' });
+    work.push({ label: 'Lateral hours carried from Step 3', detail: 'Folded in here so the modifier total covers all complexity-driven work in one place', value: formatNum(lateralHours) + ' hrs' });
 
     const modifierHours = discHours + span16Hours + spanOver24Hours + vaultHours + plateHours + voidHours + cantileverHours + specialtyHours + lateralHours;
     const modParts = [discHours, span16Hours, spanOver24Hours, vaultHours, plateHours, voidHours, cantileverHours, specialtyHours, lateralHours].map(formatNum).join(' + ');
-    work.push({ label: 'Modifier Hours Total', detail: modParts, value: formatNum(modifierHours) + ' hrs', bold: true });
+    work.push({ label: 'Modifier Hours Total', detail: 'Sum of all rows above: ' + modParts, value: formatNum(modifierHours) + ' hrs', bold: true });
 
     // ----- Step 5: System Complexity Factors -----
     // Gravity factor scales framing + P&B + roof + non-lateral modifiers.
@@ -1028,6 +1030,7 @@
     // because unusual thrust-tie / deep-pier complexity is captured via
     // extra major-concrete-detail counts rather than the system factor).
     work.push({ heading: 'Step 5: System Complexity Factors' });
+    work.push({ note: 'The Gravity System dropdown scales the framing/roof/modifier work (since concrete framing is harder than wood framing, etc.). The Lateral System dropdown scales only the lateral hours. Foundation and concrete details are left alone — they have their own per-event inputs.' });
 
     const a = state.assumptions || {};
     const gravFactor = gravityFactorFor(a.gravitySystem);
@@ -1043,18 +1046,21 @@
     const gravityLabel = labelFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
     const lateralLabel = labelFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
 
-    work.push({ label: 'Gravity system', detail: gravityLabel, value: '×' + gravFactor.toFixed(2) });
-    work.push({ label: 'Gravity scope', detail: `framing ${formatNum(framingSquareHours)} + P&B ${formatNum(pierAndBeamHours)} + roof ${formatNum(roofHours)} + mods ${formatNum(nonLateralModifiers)} = ${formatNum(gravityScope)} × ${gravFactor.toFixed(2)}`, value: formatNum(adjustedGravity) + ' hrs' });
-    work.push({ label: 'Lateral system', detail: lateralLabel, value: '×' + latFactor.toFixed(2) });
-    work.push({ label: 'Lateral (factored)', detail: `${formatNum(lateralHours)} × ${latFactor.toFixed(2)}`, value: formatNum(adjustedLateral) + ' hrs' });
+    work.push({ label: 'Gravity system selected', detail: gravityLabel + ' — multiplier applied to gravity-scope hours', value: '×' + gravFactor.toFixed(2) });
+    work.push({ label: 'Gravity scope (pre-factor)', detail: `Framing ${formatNum(framingSquareHours)} + Pier & Beam ${formatNum(pierAndBeamHours)} + Roof ${formatNum(roofHours)} + Non-lateral modifiers ${formatNum(nonLateralModifiers)} = ${formatNum(gravityScope)} hr`, value: formatNum(gravityScope) + ' hrs' });
+    work.push({ label: 'Gravity scope (after factor)', detail: `${formatNum(gravityScope)} hr × ${gravFactor.toFixed(2)} (${gravityLabel} factor) = ${formatNum(adjustedGravity)} hr`, value: formatNum(adjustedGravity) + ' hrs', bold: true });
+    work.push({ label: 'Lateral system selected', detail: lateralLabel + ' — multiplier applied to lateral hours only', value: '×' + latFactor.toFixed(2) });
+    work.push({ label: 'Lateral hours (after factor)', detail: `${formatNum(lateralHours)} hr lateral × ${latFactor.toFixed(2)} (${lateralLabel} factor) = ${formatNum(adjustedLateral)} hr`, value: formatNum(adjustedLateral) + ' hrs', bold: true });
 
     // ----- Step 6: Raw Work -----
     work.push({ heading: 'Step 6: Raw Work' });
+    work.push({ note: '"Raw work" = the engineering effort itself, before any drafting setup, ongoing coordination, or admin overhead. This is the number that drives most downstream auto-population (CA, feasibility, etc.).' });
 
     const rawWorkHours = foundationHours + concreteHours + adjustedGravity + adjustedLateral;
-    work.push({ label: 'Raw Work', detail: `Foundation ${formatNum(foundationHours)} + Concrete ${formatNum(concreteHours)} + Gravity (factored) ${formatNum(adjustedGravity)} + Lateral (factored) ${formatNum(adjustedLateral)}`, value: formatNum(rawWorkHours) + ' hrs', bold: true });
+    work.push({ label: 'Raw Work', detail: `Foundation ${formatNum(foundationHours)} + Concrete ${formatNum(concreteHours)} + Gravity scope (factored) ${formatNum(adjustedGravity)} + Lateral (factored) ${formatNum(adjustedLateral)} = ${formatNum(rawWorkHours)} hr`, value: formatNum(rawWorkHours) + ' hrs', bold: true });
 
     work.push({ heading: 'Step 7: Setup & Standard Coordination' });
+    work.push({ note: 'Setup = unavoidable drafting overhead per deliverable (cover sheet, general notes, Revit modeling/tracing, sheet setup). Standard Coordination = the small as-you-go decisions during CDs ("the header should be 12 inches not 10"). Both are required on every project.' });
 
     // Setup scales with the modeling-related portion of raw work only
     // (foundation + framing + P&B + roof). Concrete details and modifiers
@@ -1065,7 +1071,7 @@
     const setupPerLevel = 0.5 * levelsTotal;
     const setupGeoPct = 0.10 * geometricRaw;
     const setupHours = setupFixed + setupPerLevel + setupGeoPct;
-    work.push({ label: 'Setup', detail: `${formatNum(setupFixed)} fixed + ${formatNum(setupPerLevel)} (0.5 × ${levelsTotal} lvl) + ${formatNum(setupGeoPct)} (10% × ${formatNum(geometricRaw)} geo raw)`, value: formatNum(setupHours) + ' hrs' });
+    work.push({ label: 'Setup', detail: `${formatNum(setupFixed)} hr fixed (cover sheet, general notes, code references, sealing) + ${formatNum(setupPerLevel)} hr per-sheet setup (0.5 hr × ${levelsTotal} framing-plan sheets: ${state.foundationLevels} foundation + ${state.stories} story + ${state.roofLevels} roof) + ${formatNum(setupGeoPct)} hr Revit modeling (10% of ${formatNum(geometricRaw)} hr "geometric raw" — foundation + framing + P&B + roof, the parts that get traced)`, value: formatNum(setupHours) + ' hrs' });
 
     // Coordination multiplier is no longer applied to raw work directly.
     // Instead it scales the standard coordination percentage so that bigger
@@ -1073,12 +1079,13 @@
     const coordinationMultiplier = state.squareFootage * 0.00001 + 1;
     const coordinationPct = 0.10 * coordinationMultiplier;
     const coordinationHours = coordinationPct * rawWorkHours;
-    work.push({ label: 'Coord multiplier', detail: `${formatNum(state.squareFootage)} sf × 0.00001 + 1 = ${formatNum(coordinationMultiplier)}`, value: '×' + formatNum(coordinationMultiplier) });
-    work.push({ label: 'Standard coordination', detail: `(10% × ${formatNum(coordinationMultiplier)}) × ${formatNum(rawWorkHours)} raw = ${(coordinationPct * 100).toFixed(1)}% × raw`, value: formatNum(coordinationHours) + ' hrs' });
+    work.push({ label: 'Coordination multiplier', detail: `Scales coordination % up for physically larger projects: 1 + (${formatNum(state.squareFootage)} sf × 0.00001) = ${formatNum(coordinationMultiplier)} (a 10,000 sf project is ×1.10, a 1,000 sf project ×1.01)`, value: '×' + formatNum(coordinationMultiplier) });
+    work.push({ label: 'Standard coordination', detail: `${(coordinationPct * 100).toFixed(2)}% of raw work (10% base × ${formatNum(coordinationMultiplier)} size multiplier) × ${formatNum(rawWorkHours)} hr raw = ${formatNum(coordinationHours)} hr`, value: formatNum(coordinationHours) + ' hrs' });
 
     work.push({ heading: 'Step 8: Structural Analysis and Design' });
+    work.push({ note: 'The sealed deliverable line item — the engineer-of-record core scope. This combines raw work, drafting setup, and standard coordination into one number that becomes the "Structural Analysis and Design" line on the proposal.' });
     const totalHours = rawWorkHours + setupHours + coordinationHours;
-    work.push({ label: 'Analysis & Design Hours', detail: `${formatNum(rawWorkHours)} raw + ${formatNum(setupHours)} setup + ${formatNum(coordinationHours)} coord`, value: formatNum(totalHours) + ' hrs', bold: true });
+    work.push({ label: 'Analysis & Design Hours', detail: `${formatNum(rawWorkHours)} hr raw work + ${formatNum(setupHours)} hr setup + ${formatNum(coordinationHours)} hr standard coordination = ${formatNum(totalHours)} hr`, value: formatNum(totalHours) + ' hrs', bold: true });
 
     const rate = state.dollarPerHour;
     const fee = totalHours * rate;
@@ -1092,6 +1099,7 @@
     // Included flags use Design Stability and Project Type to pick the
     // right defaults; the user can override any checkbox after Calculate.
     work.push({ heading: 'Step 9: Pre-Design + Design Coordination' });
+    work.push({ note: 'Auto-populates the four design-side line items beyond the sealed set itself: Site Visit, Preliminary Review, Design Coordination (meetings during design to resolve conditions), and Early Design Assist (early-phase collaboration when geometry is still in flux). Each line\'s "Included" checkbox is set based on Project Type and Design Stability — you can override after Calculate.' });
 
     // Site Visit / Assessment: flat 2.5 hr. Included only when there's
     // existing construction to assess (Addition or Remodel).
@@ -1117,13 +1125,13 @@
     const edaHours = totalHours * edaPct;
     const dcIncluded  = (a.designStability === 'mostly_locked' || a.designStability === 'fluid');
     const edaIncluded = (a.designStability === 'fluid');
-    const dsLabel = (a.designStability || 'mostly_locked');
-    const ptLabel = (a.projectType || 'new_construction');
+    const dsLabel = labelFor(DESIGN_STABILITY_OPTIONS, a.designStability) || a.designStability || 'mostly_locked';
+    const ptLabel = labelFor(PROJECT_TYPE_OPTIONS, a.projectType) || a.projectType || 'new_construction';
 
-    work.push({ label: 'Site Visit / Assessment', detail: `flat 2.5 hr (project type: ${ptLabel})`, value: formatNum(siteVisitHours) + ' hrs ' + (siteVisitIncluded ? '(included)' : '(unchecked)') });
-    work.push({ label: 'Preliminary Review & Feasibility', detail: `max(${formatNum(rawWorkHours)} raw × ${(feasPct*100).toFixed(0)}%, floor ${feasFloor} hr)`, value: formatNum(feasHours) + ' hrs ' + (feasIncluded ? '(included)' : '(unchecked)') });
-    work.push({ label: 'Design Coordination', detail: `${formatNum(totalHours)} sealed set × ${(dcPct*100).toFixed(0)}% (stability: ${dsLabel})`, value: formatNum(dcHours) + ' hrs ' + (dcIncluded ? '(included)' : '(unchecked)') });
-    work.push({ label: 'Early Design Assist', detail: `${formatNum(totalHours)} sealed set × ${(edaPct*100).toFixed(0)}% (stability: ${dsLabel})`, value: formatNum(edaHours) + ' hrs ' + (edaIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Site Visit / Assessment', detail: `Flat 2.5 hr — typical residential site visit (travel + on-site documentation + photos). Auto-checked because Project Type is "${ptLabel}"${siteVisitIncluded ? '' : ' (so default is unchecked — no existing structure to assess)'}.`, value: formatNum(siteVisitHours) + ' hrs ' + (siteVisitIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Preliminary Review & Feasibility', detail: `5% of raw work for upfront feasibility review (max with a 0.5 hr minimum floor): max(${formatNum(rawWorkHours)} hr raw × 5% = ${formatNum(rawWorkHours * feasPct)} hr, floor ${feasFloor} hr) = ${formatNum(feasHours)} hr. Always checked; uncheck if truly skipped.`, value: formatNum(feasHours) + ' hrs ' + (feasIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Design Coordination', detail: `20% of Analysis & Design hours (${formatNum(totalHours)} × 20% = ${formatNum(dcHours)} hr) for meetings to resolve conditions during design. ${dcIncluded ? `Auto-checked because Design Stability is "${dsLabel}"` : `Default is unchecked because Design Stability is "${dsLabel}" (engineer-only scope; user can still check it)`}.`, value: formatNum(dcHours) + ' hrs ' + (dcIncluded ? '(included)' : '(unchecked)') });
+    work.push({ label: 'Early Design Assist', detail: `20% of Analysis & Design hours (${formatNum(totalHours)} × 20% = ${formatNum(edaHours)} hr) for early-phase collaboration while geometry is still in flux. ${edaIncluded ? `Auto-checked because Design Stability is "${dsLabel}"` : `Default is unchecked because Design Stability is "${dsLabel}" (only triggers on Fluid)`}.`, value: formatNum(edaHours) + ' hrs ' + (edaIncluded ? '(included)' : '(unchecked)') });
 
     // ----- Step 10: Construction Phase Services (auto-populate) -----
     // CA percentage is additive across three independent axes (gravity,
@@ -1131,11 +1139,14 @@
     // floor so tiny projects don't drop below a minimum effort.
     // Submittal Review is zeroed out when there are no shop drawings.
     work.push({ heading: 'Step 10: Construction Phase Services' });
+    work.push({ note: 'Auto-populates the three Construction Phase line items (Structural Observation, RFI Response, Submittal Review). The CA percentage adds modifiers from gravity system, lateral system, and project type to a 10% base. Each line has a minimum-hours floor so tiny projects don\'t drop below the bare-minimum CA effort. Submittal Review zeros out when no shop drawings are expected.' });
 
     const gravCaMod = caModifierFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
     const latCaMod  = caModifierFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
     const projCaMod = caModifierFor(PROJECT_TYPE_OPTIONS, a.projectType);
     const projLabel = labelFor(PROJECT_TYPE_OPTIONS, a.projectType);
+    const gravLabelForCa = labelFor(GRAVITY_SYSTEM_OPTIONS, a.gravitySystem);
+    const latLabelForCa  = labelFor(LATERAL_SYSTEM_OPTIONS, a.lateralSystem);
 
     let caPct = CA_BASE_PCT + gravCaMod + latCaMod + projCaMod;
     const caPctClamped = Math.min(caPct, CA_CAP_PCT);
@@ -1150,13 +1161,13 @@
     const subHrs = hasShopDrawings ? Math.max(caTotal * CA_SPLIT.submittal, CA_FLOORS.submittal) : 0;
     const caLineTotal = obsHrs + rfiHrs + subHrs;
 
-    work.push({ label: 'CA %', detail: `${(CA_BASE_PCT*100).toFixed(0)}% base + ${(gravCaMod*100).toFixed(0)}% gravity + ${(latCaMod*100).toFixed(0)}% lateral + ${(projCaMod*100).toFixed(0)}% ${projLabel.toLowerCase()}${caPct > CA_CAP_PCT ? ` (capped from ${(caPct*100).toFixed(0)}%)` : ''}`, value: (caPctClamped*100).toFixed(0) + '%' });
-    work.push({ label: 'CA Total (pre-floors)', detail: `${formatNum(rawWorkHours)} raw × ${(caPctClamped*100).toFixed(0)}%`, value: formatNum(caTotal) + ' hrs' });
-    work.push({ label: 'Shop drawings', detail: hasShopDrawings ? 'yes — submittal review active' : 'no — submittal review off', value: '' });
-    work.push({ label: 'Structural Observation', detail: `max(${formatNum(caTotal * CA_SPLIT.observation)}, floor ${CA_FLOORS.observation})`, value: formatNum(obsHrs) + ' hrs' });
-    work.push({ label: 'RFI Response', detail: `max(${formatNum(caTotal * CA_SPLIT.rfi)}, floor ${CA_FLOORS.rfi})`, value: formatNum(rfiHrs) + ' hrs' });
-    work.push({ label: 'Submittal Review', detail: hasShopDrawings ? `max(${formatNum(caTotal * CA_SPLIT.submittal)}, floor ${CA_FLOORS.submittal})` : 'no shop drawings', value: formatNum(subHrs) + ' hrs' });
-    work.push({ label: 'CA Line Total', detail: `${formatNum(obsHrs)} + ${formatNum(rfiHrs)} + ${formatNum(subHrs)}`, value: formatNum(caLineTotal) + ' hrs', bold: true });
+    work.push({ label: 'CA Percentage', detail: `${(CA_BASE_PCT*100).toFixed(0)}% base + ${(gravCaMod*100).toFixed(0)}% gravity (${gravLabelForCa}) + ${(latCaMod*100).toFixed(0)}% lateral (${latLabelForCa}) + ${(projCaMod*100).toFixed(0)}% project type (${projLabel})${caPct > CA_CAP_PCT ? ` = ${(caPct*100).toFixed(0)}% capped at ${(CA_CAP_PCT*100).toFixed(0)}%` : ` = ${(caPctClamped*100).toFixed(0)}%`}`, value: (caPctClamped*100).toFixed(0) + '%' });
+    work.push({ label: 'CA Total (before per-line floors)', detail: `${formatNum(rawWorkHours)} hr raw work × ${(caPctClamped*100).toFixed(0)}% CA = ${formatNum(caTotal)} hr`, value: formatNum(caTotal) + ' hrs' });
+    work.push({ label: 'Shop drawings expected?', detail: hasShopDrawings ? 'Yes — Submittal Review activates (gravity system requires shop drawings, or Truss Package is set to Yes)' : 'No — Submittal Review skipped (Light Wood Framing without truss package = no shop drawings to review)', value: hasShopDrawings ? 'Yes' : 'No' });
+    work.push({ label: 'Structural Observation', detail: `50% of CA total = ${formatNum(caTotal * CA_SPLIT.observation)} hr, floored at ${CA_FLOORS.observation} hr minimum (every project needs at least ~2 site visits) = ${formatNum(obsHrs)} hr`, value: formatNum(obsHrs) + ' hrs' });
+    work.push({ label: 'RFI Response', detail: `40% of CA total = ${formatNum(caTotal * CA_SPLIT.rfi)} hr, floored at ${CA_FLOORS.rfi} hr minimum (every project gets a handful of field-condition RFIs) = ${formatNum(rfiHrs)} hr`, value: formatNum(rfiHrs) + ' hrs' });
+    work.push({ label: 'Submittal Review', detail: hasShopDrawings ? `10% of CA total = ${formatNum(caTotal * CA_SPLIT.submittal)} hr, floored at ${CA_FLOORS.submittal} hr minimum = ${formatNum(subHrs)} hr` : 'Skipped — no shop drawings expected for this gravity system / truss combo', value: formatNum(subHrs) + ' hrs' });
+    work.push({ label: 'CA Line Total', detail: `Sum of CA lines: ${formatNum(obsHrs)} obs + ${formatNum(rfiHrs)} RFI + ${formatNum(subHrs)} submittal = ${formatNum(caLineTotal)} hr`, value: formatNum(caLineTotal) + ' hrs', bold: true });
 
     // Apply auto-populated hours/dollars to state.lineItems so the Fee
     // Estimate table picks them up on next render. Hours and included
