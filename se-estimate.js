@@ -80,19 +80,35 @@
     { value: 'to_be_provided',      label: 'To be provided' },
   ];
 
+  // Engineer-rate constant. All line items bill at this rate except
+  // Structural Analysis and Design, which uses the user-controlled
+  // "Target $/Hour" input (default $160) — that line is a drafter-blended
+  // rate since portions of the production work go to non-licensed staff.
+  const RATE_ENGINEER = 190;
+
   // Fee line items, grouped by proposal phase. Sealed Set is auto-populated
   // by the calculator on each Calculate; all others default to 0 and are
   // user-editable (auto-population for the others lands in a later phase).
   const LINE_ITEM_DEFS = [
-    { id: 'early_design_assist',      label: 'Early Design Assist',              phase: 'Pre-Design' },
-    { id: 'site_visit',               label: 'Site Visit / Assessment',          phase: 'Pre-Design' },
-    { id: 'preliminary_feasibility',  label: 'Preliminary Review & Feasibility', phase: 'Pre-Design' },
-    { id: 'design_coordination',      label: 'Design Coordination',              phase: 'Structural Analysis and Design' },
-    { id: 'sealed_set',               label: 'Sealed Structural Set',            phase: 'Structural Analysis and Design' },
-    { id: 'rfi_response',             label: 'RFI Response',                     phase: 'Construction Phase' },
-    { id: 'submittal_review',         label: 'Submittal Review',                 phase: 'Construction Phase' },
-    { id: 'structural_observation',   label: 'Structural Observation',           phase: 'Construction Phase' },
+    { id: 'early_design_assist',        label: 'Early Design Assist',              phase: 'Pre-Design',   rate: RATE_ENGINEER },
+    { id: 'site_visit',                 label: 'Site Visit / Assessment',          phase: 'Pre-Design',   rate: RATE_ENGINEER },
+    { id: 'preliminary_feasibility',    label: 'Preliminary Review & Feasibility', phase: 'Pre-Design',   rate: RATE_ENGINEER },
+    { id: 'design_coordination',        label: 'Design Coordination',              phase: 'Design',       rate: RATE_ENGINEER },
+    { id: 'structural_analysis_design', label: 'Structural Analysis and Design',   phase: 'Design',       rate: null /* uses state.dollarPerHour */ },
+    { id: 'rfi_response',               label: 'RFI Response',                     phase: 'Construction', rate: RATE_ENGINEER },
+    { id: 'submittal_review',           label: 'Submittal Review',                 phase: 'Construction', rate: RATE_ENGINEER },
+    { id: 'structural_observation',     label: 'Structural Observation',           phase: 'Construction', rate: RATE_ENGINEER },
   ];
+
+  // Returns the hourly rate for a given line id. Most lines bill at
+  // RATE_ENGINEER ($190); Structural Analysis and Design uses the user-
+  // controlled global rate (state.dollarPerHour, default $160) since
+  // production work on that line is partly drafter-blended.
+  function rateForLine(id) {
+    const def = LINE_ITEM_DEFS.find((d) => d.id === id);
+    if (def && typeof def.rate === 'number') return def.rate;
+    return state && state.dollarPerHour > 0 ? state.dollarPerHour : 160;
+  }
 
   function makeInitialLineItems() {
     const out = {};
@@ -1051,9 +1067,9 @@
     work.push({ label: 'Coord multiplier', detail: `${formatNum(state.squareFootage)} sf × 0.00001 + 1 = ${formatNum(coordinationMultiplier)}`, value: '×' + formatNum(coordinationMultiplier) });
     work.push({ label: 'Standard coordination', detail: `(10% × ${formatNum(coordinationMultiplier)}) × ${formatNum(rawWorkHours)} raw = ${(coordinationPct * 100).toFixed(1)}% × raw`, value: formatNum(coordinationHours) + ' hrs' });
 
-    work.push({ heading: 'Step 8: Sealed Structural Set' });
+    work.push({ heading: 'Step 8: Structural Analysis and Design' });
     const totalHours = rawWorkHours + setupHours + coordinationHours;
-    work.push({ label: 'Sealed Set Hours', detail: `${formatNum(rawWorkHours)} raw + ${formatNum(setupHours)} setup + ${formatNum(coordinationHours)} coord`, value: formatNum(totalHours) + ' hrs', bold: true });
+    work.push({ label: 'Analysis & Design Hours', detail: `${formatNum(rawWorkHours)} raw + ${formatNum(setupHours)} setup + ${formatNum(coordinationHours)} coord`, value: formatNum(totalHours) + ' hrs', bold: true });
 
     const rate = state.dollarPerHour;
     const fee = totalHours * rate;
@@ -1135,12 +1151,13 @@
 
     // Apply auto-populated hours/dollars to state.lineItems so the Fee
     // Estimate table picks them up on next render. Always overwrites —
-    // user edits to these lines are replaced on every Calculate.
+    // user edits to these lines are replaced on every Calculate. Each
+    // line bills at its own rate (rateForLine), not the global rate.
     if (!state.lineItems) state.lineItems = makeInitialLineItems();
     const writeLine = (id, hrs, included) => {
       if (!state.lineItems[id]) state.lineItems[id] = { hours: 0, dollars: 0, included: true };
       state.lineItems[id].hours = hrs;
-      state.lineItems[id].dollars = hrs * rate;
+      state.lineItems[id].dollars = hrs * rateForLine(id);
       if (typeof included === 'boolean') state.lineItems[id].included = included;
     };
     writeLine('site_visit', siteVisitHours, siteVisitIncluded);
@@ -1195,6 +1212,12 @@
     if (!validFoundationTypes.has(merged.assumptions.foundationType)) {
       merged.assumptions.foundationType = 'slab_on_grade';
     }
+    // Migrate the legacy "sealed_set" line item id to the renamed
+    // "structural_analysis_design". Preserves any user edits on that line.
+    if (merged.lineItems && merged.lineItems.sealed_set && !merged.lineItems.structural_analysis_design) {
+      merged.lineItems.structural_analysis_design = merged.lineItems.sealed_set;
+    }
+    if (merged.lineItems) delete merged.lineItems.sealed_set;
     // Backfill any missing line items so older saves render the new UI.
     const seedLines = makeInitialLineItems();
     if (!merged.lineItems || typeof merged.lineItems !== 'object') merged.lineItems = {};
@@ -1229,18 +1252,19 @@
     currentRate = rate;
     lastCalculatedFee = totalHours * rate;
 
-    // Seed the auto-populated Sealed Set line item from the latest calc.
+    // Seed the auto-populated Structural Analysis and Design line item
+    // from the latest calc. (Was "sealed_set" before the rename.)
     if (!state.lineItems) state.lineItems = makeInitialLineItems();
-    state.lineItems.sealed_set = state.lineItems.sealed_set || { hours: 0, dollars: 0, included: true };
-    state.lineItems.sealed_set.hours = totalHours;
-    state.lineItems.sealed_set.dollars = totalHours * rate;
+    state.lineItems.structural_analysis_design = state.lineItems.structural_analysis_design || { hours: 0, dollars: 0, included: true };
+    state.lineItems.structural_analysis_design.hours = totalHours;
+    state.lineItems.structural_analysis_design.dollars = totalHours * rate;
 
     const outputDiv = document.getElementById('estimate-output');
 
     let html = `<div class="estimate-output">
       <div class="summary-banner">
         <div class="summary-item">
-          <span class="summary-label">Sealed Set Hours</span>
+          <span class="summary-label">Analysis &amp; Design Hours</span>
           <div class="summary-adjust">
             <button class="btn-adjust" id="btnHoursDown" title="Decrease hours">−</button>
             <span class="summary-value" id="summaryHours">${formatNum(totalHours)}</span>
@@ -1248,7 +1272,7 @@
           </div>
         </div>
         <div class="summary-item">
-          <span class="summary-label">Sealed Set Fee</span>
+          <span class="summary-label">Analysis &amp; Design Fee</span>
           <span class="summary-value" id="summaryFee">$${formatMoney(lastCalculatedFee)}</span>
         </div>
         <div class="summary-item summary-action">
@@ -1301,10 +1325,11 @@
     document.getElementById('btnHoursUp').addEventListener('click', () => {
       adjustedHours += 1;
       updateSummaryFee();
-      // Keep Sealed Set line item in sync so proposal/export reflect the bump.
-      state.lineItems.sealed_set.hours = adjustedHours;
-      state.lineItems.sealed_set.dollars = adjustedHours * currentRate;
-      refreshLineItemRow('sealed_set');
+      // Keep Structural Analysis and Design line item in sync so
+      // proposal/export reflect the bump.
+      state.lineItems.structural_analysis_design.hours = adjustedHours;
+      state.lineItems.structural_analysis_design.dollars = adjustedHours * currentRate;
+      refreshLineItemRow('structural_analysis_design');
       refreshLineItemTotals();
     });
 
@@ -1312,9 +1337,9 @@
       if (adjustedHours >= 1) {
         adjustedHours -= 1;
         updateSummaryFee();
-        state.lineItems.sealed_set.hours = adjustedHours;
-        state.lineItems.sealed_set.dollars = adjustedHours * currentRate;
-        refreshLineItemRow('sealed_set');
+        state.lineItems.structural_analysis_design.hours = adjustedHours;
+        state.lineItems.structural_analysis_design.dollars = adjustedHours * currentRate;
+        refreshLineItemRow('structural_analysis_design');
         refreshLineItemTotals();
       }
     });
@@ -1389,8 +1414,9 @@
       input.addEventListener('input', () => {
         const id = input.dataset.line;
         const hrs = parseFloat(input.value) || 0;
+        const lineRate = rateForLine(id);
         state.lineItems[id].hours = hrs;
-        state.lineItems[id].dollars = hrs * currentRate;
+        state.lineItems[id].dollars = hrs * lineRate;
         const dollarsEl = document.querySelector(`.li-dollars[data-line="${id}"]`);
         if (dollarsEl) dollarsEl.value = Math.round(state.lineItems[id].dollars);
         refreshLineItemTotals();
@@ -1401,8 +1427,9 @@
       input.addEventListener('input', () => {
         const id = input.dataset.line;
         const dol = parseFloat(input.value) || 0;
+        const lineRate = rateForLine(id);
         state.lineItems[id].dollars = dol;
-        state.lineItems[id].hours = currentRate > 0 ? dol / currentRate : 0;
+        state.lineItems[id].hours = lineRate > 0 ? dol / lineRate : 0;
         const hrsEl = document.querySelector(`.li-hrs[data-line="${id}"]`);
         if (hrsEl) hrsEl.value = formatNum(state.lineItems[id].hours);
         refreshLineItemTotals();
@@ -1876,12 +1903,12 @@
         <li style="${font}"><strong>Site Visit / Assessment:</strong> On-site evaluation to document existing conditions, perform preliminary framing/foundation analysis, and capture the space via photo and/or 360&deg; video.</li>
         <li style="${font}"><strong>Preliminary Review &amp; Feasibility:</strong> Evaluation of proposed scope against site and code constraints. Identifies structural feasibility concerns, system options, and cost drivers early enough to inform design decisions.</li>
       </ul>
-      <p style="${font}"><strong>Structural Analysis and Design &mdash;</strong> Produce the sealed structural documents for the project, including the coordination work that feeds into them.</p>
+      <p style="${font}"><strong>Design &mdash;</strong> Produce the sealed structural documents for the project, including the coordination work that feeds into them.</p>
       <ul style="${font}">
         <li style="${font}"><strong>Design Coordination:</strong> Ongoing coordination with the architect or designer as detailed design develops. Addresses structural decisions that emerge during design &mdash; connection approaches, member depth constraints, lateral bracing locations, and similar conditions that benefit from structural input before being locked in drawings.</li>
-        <li style="${font}"><strong>Sealed Structural Set:</strong> Complete structural drawings sealed for construction. Includes foundation plan, framing plans, schedules, structural details, and structural notes.</li>
+        <li style="${font}"><strong>Structural Analysis and Design:</strong> Complete structural drawings sealed for construction. Includes foundation plan, framing plans, schedules, structural details, and structural notes.</li>
       </ul>
-      <p style="${font}"><strong>Construction Phase &mdash;</strong> Support the project during construction in a structural advisory role.</p>
+      <p style="${font}"><strong>Construction &mdash;</strong> Support the project during construction in a structural advisory role.</p>
       <p style="${font}"><em>*The engineer is not the owner's contractual representative during construction, does not administer the construction contract, and does not provide continuous on-site inspection.</em></p>
       <ul style="${font}">
         <li style="${font}"><strong>RFI Response:</strong> Response to contractor Requests for Information on structural matters during construction.</li>
@@ -1896,13 +1923,13 @@
         <li style="${font}"><strong>Deliverables:</strong> Ongoing Consultation, Site Visit / Assessment, Feasibility Findings</li>
         <li style="${font}"><strong>Approximate Due Date:</strong> ASAP</li>
       </ul>
-      <p style="${font}"><strong>Structural Analysis and Design:</strong></p>
+      <p style="${font}"><strong>Design:</strong></p>
       <ul style="${font}">
         <li style="${font}"><strong>Deliverables:</strong> Coordination Set(s) (as needed), Final Approval Set for Client Review</li>
         <li style="${font}"><strong>Approximate Due Date:</strong> ${cdWks} weeks</li>
         <li style="${font}"><em>Note: Sealed set will be delivered 1&ndash;2 weeks after client approval.</em></li>
       </ul>
-      <p style="${font}"><strong>Construction Administration (CA):</strong></p>
+      <p style="${font}"><strong>Construction:</strong></p>
       <ul style="${font}">
         <li style="${font}"><strong>Deliverables:</strong> Responses to Requests for Information (RFIs), pre-pour and framing observations and markups, shop drawing review</li>
         <li style="${font}"><strong>Due Date:</strong> Ongoing through substantial completion.</li>
