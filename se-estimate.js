@@ -935,7 +935,18 @@
           : 5.2 + 0.25 * (foundationSquares - 8));
     const foundationHours = fndLevelHours + fndSquareHours;
 
-    const framingSquareHours = 3 * framingSquares;
+    // Framing squares use a tapered rate: the first sq is 3.0 hr, each
+    // additional sq drops by 0.167 hr, and every sq from #10 onward is
+    // floored at 1.5 hr. Reflects shared-wall overlap as squares connect —
+    // headers, studs, and some drafting on a shared wall are sized once,
+    // not twice. Closed form of that per-square sum:
+    //   n ≤ 9: 3n − 0.0835·n·(n−1)        (linear-decay sum)
+    //   n > 9: 20.988 + 1.5·(n − 9)       (linear at the floor)
+    const framingSquareHours = framingSquares <= 0
+      ? 0
+      : (framingSquares <= 9
+          ? 3 * framingSquares - 0.0835 * framingSquares * (framingSquares - 1)
+          : 20.988 + 1.5 * (framingSquares - 9));
 
     const roofLevelHours = state.roofLevels * 1;
     const roofCountHours = state.roofCount * 1;
@@ -947,7 +958,7 @@
     const concreteHours = minorConcreteHours + majorConcreteHours + manualConcreteHours;
 
     work.push({ label: 'Foundation', detail: `${state.foundationLevels} foundation level${state.foundationLevels === 1 ? '' : 's'} × 1 hr (one sheet setup per level) + ${formatNum(foundationSquares)} squares of foundation, tapered (first square = 1.0 hr, dropping 0.1 hr each, floored at 0.25 hr/sq) = ${formatNum(fndSquareHours)} hr from squares`, value: formatNum(foundationHours) + ' hrs' });
-    work.push({ label: 'Framing', detail: `${formatNum(framingSquares)} framing squares × 3 hr each (per-square work: joist sizing, header above openings, plan callouts)`, value: formatNum(framingSquareHours) + ' hrs' });
+    work.push({ label: 'Framing', detail: `${formatNum(framingSquares)} framing squares, tapered (first sq = 3.0 hr — joist sizing + 4 sides of header sizing + 4 sides of stud sizing + drafting; each additional sq drops 0.167 hr because shared walls between adjacent squares mean headers/studs/drafting on the shared wall are sized once, not twice; floored at 1.5 hr/sq from sq #10 onward)`, value: formatNum(framingSquareHours) + ' hrs' });
 
     const pierAndBeamHours = state.pierAndBeamPresent ? 2 * pierAndBeamSquares : 0;
     if (state.pierAndBeamPresent) {
